@@ -1,0 +1,67 @@
+name: Build extension
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate manifest.json
+        run: python3 -c "import json; json.load(open('manifest.json'))"
+
+      - name: Syntax-check JavaScript
+        run: |
+          for f in src/*.js; do
+            echo "checking $f"
+            node --check "$f"
+          done
+
+      - name: Read manifest version
+        id: meta
+        run: |
+          version=$(python3 -c "import json; print(json.load(open('manifest.json'))['version'])")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "zip=pii-browser-ext-$version.zip" >> "$GITHUB_OUTPUT"
+
+      # A release tag that disagrees with manifest.json produces a store upload
+      # rejected for a duplicate version number — catch it before packaging.
+      - name: Check tag matches manifest version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$tag" != "${{ steps.meta.outputs.version }}" ]; then
+            echo "Tag v$tag does not match manifest version ${{ steps.meta.outputs.version }}" >&2
+            exit 1
+          fi
+
+      - name: Build zip
+        run: |
+          zip -r "${{ steps.meta.outputs.zip }}" . \
+            -x '.git/*' '.github/*' '.gitignore' '*/.DS_Store' '.DS_Store' '*.pem' '*.crx' '*.zip'
+          unzip -l "${{ steps.meta.outputs.zip }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pii-browser-ext-${{ steps.meta.outputs.version }}
+          path: ${{ steps.meta.outputs.zip }}
+          if-no-files-found: error
+
+      - name: Attach zip to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "${{ steps.meta.outputs.zip }}" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            || gh release upload "$GITHUB_REF_NAME" "${{ steps.meta.outputs.zip }}" --clobber
