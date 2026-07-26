@@ -43,9 +43,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 
+// Anything in SYNC_DEFAULTS is uploaded to the user's Google account and
+// mirrored onto every device they sign into. Credentials belong in
+// LOCAL_DEFAULTS, which never leaves the machine.
 const SYNC_DEFAULTS = {
   piiApiUrl: '',
-  piiApiKey: '',
   piiOauthClientId: '',
   language: 'it',
   mode: 'tag',
@@ -56,6 +58,7 @@ const SYNC_DEFAULTS = {
 };
 
 const LOCAL_DEFAULTS = {
+  piiApiKey: '',
   oauthAccessToken: '',
   oauthRefreshToken: '',
   oauthExpiresAt: 0,
@@ -72,6 +75,26 @@ async function getSettings() {
   ]);
   return { ...sync, ...local };
 }
+
+/**
+ * Earlier versions kept piiApiKey in storage.sync, so it was uploaded to the
+ * user's Google account. Pull any such copy down into local storage and delete
+ * the synced one. Runs on install and on every service-worker start, since a
+ * key can still arrive from another device that has not updated yet.
+ */
+async function migrateApiKeyOutOfSync() {
+  const { piiApiKey } = await chrome.storage.sync.get({ piiApiKey: '' });
+  if (!piiApiKey) return;
+
+  const local = await chrome.storage.local.get({ piiApiKey: '' });
+  if (!local.piiApiKey) {
+    await chrome.storage.local.set({ piiApiKey });
+  }
+  await chrome.storage.sync.remove('piiApiKey');
+}
+
+migrateApiKeyOutOfSync();
+chrome.runtime.onInstalled.addListener(() => { migrateApiKeyOutOfSync(); });
 
 // ── OAuth client discovery ────────────────────────────────────────────────────
 

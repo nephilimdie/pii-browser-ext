@@ -1,8 +1,9 @@
 const $ = id => document.getElementById(id);
 
+// piiApiKey deliberately lives in storage.local, not here — storage.sync is
+// uploaded to the user's Google account. See background.js.
 const SYNC_DEFAULTS = {
   piiApiUrl: '',
-  piiApiKey: '',
   piiOauthClientId: '',
   language: 'it',
   mode: 'tag',
@@ -13,9 +14,17 @@ const SYNC_DEFAULTS = {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
-chrome.storage.sync.get(SYNC_DEFAULTS, sync => {
+// Read from the manifest so the footer can never drift out of sync with it.
+$('ext-version').textContent = `v${chrome.runtime.getManifest().version}`;
+
+Promise.all([
+  chrome.storage.sync.get(SYNC_DEFAULTS),
+  chrome.storage.local.get({ piiApiKey: '' }),
+]).then(([sync, local]) => {
+  const apiKey = local.piiApiKey;
+
   $('api-url').value         = sync.piiApiUrl;
-  $('api-key').value         = sync.piiApiKey;
+  $('api-key').value         = apiKey;
   $('oauth-client-id').value = sync.piiOauthClientId;
   $('language').value        = sync.language;
   $('mode').value            = sync.mode;
@@ -32,10 +41,10 @@ chrome.storage.sync.get(SYNC_DEFAULTS, sync => {
     checkHttpWarn(sync.piiApiUrl);
     // If no client ID yet, try to auto-detect
     if (!sync.piiOauthClientId) autoDetectClientId(sync.piiApiUrl);
-    loadContextTypes(sync.piiApiUrl, sync.piiApiKey, sync.contextType || 'generic');
+    loadContextTypes(sync.piiApiUrl, apiKey, sync.contextType || 'generic');
   }
 
-  refreshAccountUI(sync.piiApiUrl, sync.piiApiKey);
+  refreshAccountUI(sync.piiApiUrl, apiKey);
 });
 
 // ── Account UI ────────────────────────────────────────────────────────────────
@@ -308,16 +317,21 @@ $('save-btn').addEventListener('click', () => {
 
 function persistSettings(url, key, clientId) {
   const contextType = $('context-type').value || 'generic';
-  chrome.storage.sync.set({
-    piiApiUrl:        url,
-    piiApiKey:        key,
-    piiOauthClientId: clientId,
-    language:         $('language').value,
-    mode:             $('mode').value,
-    contextType,
-    autoSend:         $('auto-send').checked,
-    interceptSend:    $('intercept-send').checked,
-  }, async () => {
+
+  // The key goes to local storage only — storage.sync would upload it to the
+  // user's Google account.
+  Promise.all([
+    chrome.storage.sync.set({
+      piiApiUrl:        url,
+      piiOauthClientId: clientId,
+      language:         $('language').value,
+      mode:             $('mode').value,
+      contextType,
+      autoSend:         $('auto-send').checked,
+      interceptSend:    $('intercept-send').checked,
+    }),
+    chrome.storage.local.set({ piiApiKey: key }),
+  ]).then(async () => {
     $('banner-unconfigured').style.display = 'none';
     showMsg('settings-msg', 'Saved.', 'ok');
 
