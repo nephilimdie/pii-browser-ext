@@ -280,13 +280,33 @@ $('toggle-key').addEventListener('click', () => {
   inp.type = inp.type === 'password' ? 'text' : 'password';
 });
 
-$('save-btn').addEventListener('click', async () => {
+/** Match pattern covering every path on the API URL's origin. */
+function originPattern(url) {
+  try { return `${new URL(url).origin}/*`; } catch { return null; }
+}
+
+$('save-btn').addEventListener('click', () => {
   const url      = $('api-url').value.trim().replace(/\/$/, '');
   const key      = $('api-key').value.trim();
   const clientId = $('oauth-client-id').value.trim();
 
   if (!url) { showMsg('settings-msg', 'API URL is required.', 'err'); return; }
 
+  const pattern = originPattern(url);
+  if (!pattern) { showMsg('settings-msg', 'API URL is not a valid URL.', 'err'); return; }
+
+  // Must run inside the click gesture: request() resolves immediately when the
+  // origin was already granted, so calling it unconditionally is safe.
+  chrome.permissions.request({ origins: [pattern] }, granted => {
+    if (!granted) {
+      showMsg('settings-msg', 'Access to that host was denied — settings not saved.', 'err');
+      return;
+    }
+    persistSettings(url, key, clientId);
+  });
+});
+
+function persistSettings(url, key, clientId) {
   const contextType = $('context-type').value || 'generic';
   chrome.storage.sync.set({
     piiApiUrl:        url,
@@ -309,15 +329,25 @@ $('save-btn').addEventListener('click', async () => {
     }
     if (url) loadContextTypes(url, key, contextType);
   });
-});
+}
 
 $('test-btn').addEventListener('click', () => {
   const url = $('api-url').value.trim().replace(/\/$/, '');
   const key = $('api-key').value.trim();
   if (!url) { showMsg('settings-msg', 'Fill in the API URL first.', 'err'); return; }
-  showMsg('settings-msg', 'Testing…', '');
-  checkConnection(url, key).then(ok => {
-    if (ok) showMsg('settings-msg', '✓ Connection OK.', 'ok');
+
+  const pattern = originPattern(url);
+  if (!pattern) { showMsg('settings-msg', 'API URL is not a valid URL.', 'err'); return; }
+
+  chrome.permissions.request({ origins: [pattern] }, granted => {
+    if (!granted) {
+      showMsg('settings-msg', 'Access to that host was denied.', 'err');
+      return;
+    }
+    showMsg('settings-msg', 'Testing…', '');
+    checkConnection(url, key).then(ok => {
+      if (ok) showMsg('settings-msg', '✓ Connection OK.', 'ok');
+    });
   });
 });
 
