@@ -1,0 +1,384 @@
+/* ── Toolbar ──────────────────────────────────────────────────────────────── */
+.pii-toolbar {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px;
+  background: #fff;
+  border: 1px solid #e0e3f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(15,23,41,0.12);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  pointer-events: all;
+  user-select: none;
+}
+
+.pii-shield-btn {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 10px 5px 6px;
+  background: #4f46e5;
+  color: #fff;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background .15s, transform .1s;
+}
+.pii-shield-btn:hover  { background: #4338ca; transform: scale(1.03); }
+.pii-shield-btn:active { transform: scale(0.97); }
+.pii-shield-btn:disabled { background: #a5b4fc; cursor: not-allowed; transform: none; }
+.pii-shield-btn.pii-is-loading img {
+  animation: pii-pulse 1s ease-in-out infinite;
+}
+
+.pii-shield-label {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  line-height: 1;
+}
+
+/* ── Panel shell ─────────────────────────────────────────────────────────── */
+.pii-panel {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: min(460px, calc(100vw - 32px));
+  background: #fff;
+  border: 1px solid #e0e3f0;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(15,23,41,0.18);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+  color: #0f1729;
+  z-index: 99999;
+  overflow: hidden;
+}
+
+.pii-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 14px;
+  background: #4f46e5;
+  color: #fff;
+}
+.pii-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 800;
+}
+.pii-panel-close {
+  background: rgba(255,255,255,0.15);
+  border: 0;
+  color: #fff;
+  cursor: pointer;
+  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+.pii-panel-close:hover { background: rgba(255,255,255,0.3); }
+
+/* ── Tabs ────────────────────────────────────────────────────────────────── */
+.pii-tab-bar {
+  display: flex;
+  border-bottom: 1px solid #e0e3f0;
+  background: #f8f9fc;
+}
+
+.pii-tab {
+  flex: 1;
+  padding: 9px 12px;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: color .12s, border-color .12s;
+}
+.pii-tab:hover { color: #4f46e5; }
+.pii-tab-active {
+  color: #4f46e5;
+  border-bottom-color: #4f46e5;
+  background: #fff;
+}
+
+/* ── Pane ────────────────────────────────────────────────────────────────── */
+.pii-pane {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pii-pane-foot {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 4px;
+}
+
+/* ── Form fields ─────────────────────────────────────────────────────────── */
+.pii-field { display: flex; flex-direction: column; gap: 4px; }
+
+.pii-field-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pii-select {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 7px;
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #374151;
+  background: #fff;
+  cursor: pointer;
+  appearance: auto;
+  outline: none;
+}
+.pii-select:focus { border-color: #6366f1; box-shadow: 0 0 0 2px rgba(99,102,241,0.15); }
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+.pii-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #4f46e5;
+  color: #fff;
+  border: 0;
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  transition: background .15s;
+}
+.pii-btn:hover    { background: #4338ca; }
+.pii-btn:disabled { background: #a5b4fc; cursor: not-allowed; }
+.pii-btn.pii-is-loading {
+  min-width: 136px;
+  justify-content: center;
+}
+
+.pii-btn-outline {
+  background: #f4f6fb;
+  color: #39415a;
+  border: 1px solid #e0e3f0;
+}
+.pii-btn-outline:hover { background: #eef0fb; }
+.pii-btn-outline:disabled {
+  background: #f4f6fb;
+  color: #8b93a8;
+  border-color: #e5e7f0;
+}
+
+.pii-btn-restore {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+.pii-btn-restore:hover { background: #d1fae5; }
+
+.pii-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255,255,255,0.4);
+  border-top-color: #fff;
+  border-radius: 999px;
+  animation: pii-spin .75s linear infinite;
+  flex: 0 0 auto;
+}
+
+.pii-btn-outline .pii-spinner {
+  border-color: rgba(79,70,229,0.22);
+  border-top-color: #4f46e5;
+}
+
+@keyframes pii-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pii-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .68; transform: scale(.92); }
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────────── */
+.pii-empty {
+  padding: 24px 16px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: #9ca3af;
+  line-height: 1.6;
+}
+
+/* ── Result pane content ─────────────────────────────────────────────────── */
+.pii-result-pane { padding: 0; gap: 0; }
+
+.pii-panel-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid #eef0f6;
+}
+.pii-panel-col { padding: 12px 14px; }
+.pii-panel-col + .pii-panel-col { border-left: 1px solid #eef0f6; }
+
+.pii-col-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8089a0;
+  margin-bottom: 6px;
+}
+
+.pii-copy-mini {
+  border: 1px solid #e0e3f0;
+  border-radius: 5px;
+  background: #fff;
+  color: #4f46e5;
+  cursor: pointer;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 4px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.pii-copy-mini:hover { background: #eef0ff; }
+.pii-copy-mini:disabled {
+  color: #059669;
+  cursor: default;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+.pii-col-body {
+  font-size: 12px;
+  line-height: 1.55;
+  max-height: 80px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #39415a;
+}
+.pii-col-original { color: #6b7280; }
+
+.pii-col-anon .pii-token-chip {
+  display: inline;
+  background: #eef0ff;
+  color: #4f46e5;
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'SF Mono', ui-monospace, monospace;
+}
+
+.pii-entity-list {
+  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 110px;
+  overflow-y: auto;
+  border-bottom: 1px solid #eef0f6;
+}
+.pii-entity-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.pii-entity-token {
+  background: #eef0ff;
+  color: #4f46e5;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: 'SF Mono', ui-monospace, monospace;
+  white-space: nowrap;
+}
+.pii-entity-arrow { color: #9ca3af; }
+.pii-entity-orig {
+  color: #374151;
+  font-size: 12px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pii-entity-type {
+  font-size: 10px;
+  font-weight: 800;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+}
+
+.pii-feedback-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  background: #f8f9fc;
+  border-bottom: 1px solid #eef0f6;
+}
+
+.pii-feedback-label {
+  flex: 1;
+  color: #5b647a;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.pii-feedback-btn {
+  border: 1px solid #d7dbea;
+  border-radius: 6px;
+  background: #fff;
+  color: #39415a;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 6px 9px;
+}
+.pii-feedback-btn:hover { background: #eef0ff; color: #4f46e5; }
+.pii-feedback-btn:disabled { cursor: default; opacity: .7; }
+.pii-feedback-positive { background: #ecfdf5; }
+.pii-feedback-negative { background: #fff7ed; }
+
+.pii-result-pane .pii-pane-foot {
+  padding: 10px 14px;
+  background: #f8f9fc;
+  border-top: 1px solid #eef0f6;
+}

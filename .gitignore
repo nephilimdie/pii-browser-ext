@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Chrome extension signing / packaging artifacts — NEVER commit
+*.pem
+*.crx
+*.zip
+
+# Editors
+.vscode/
+.idea/
+
+# Node (if a build step is added later)
+node_modules/
+dist/
