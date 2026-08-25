@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "PII Protect",
-  "version": "0.3.0",
-  "description": "Anonymize PII before sending text to ChatGPT, Claude.ai or any web LLM. Powered by pii-protect.",
+  "name": "Pseudora",
+  "version": "1.0.0",
+  "description": "Anonimizza i dati personali prima di inviarli a ChatGPT, Claude o Gemini. Powered by Pseudora Cloud.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://chatgpt.com/*",
