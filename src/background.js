@@ -337,7 +337,7 @@ async function getAuthHeaders(s) {
     return headers;
   }
   if (s.piiApiKey) return { 'X-Api-Key': s.piiApiKey };
-  throw new Error('Not authenticated — login with your PII Protect account or configure an API key.');
+  throw new Error('Not authenticated — login with your Pseudora account or configure an API key.');
 }
 
 // ── Health check ──────────────────────────────────────────────────────────────
@@ -388,7 +388,7 @@ async function handleGetDomainPolicies({ url, key }) {
   const headers = await getAuthHeaders(testSettings);
 
   const r = await fetch(`${baseUrl}/v1/admin/domain-policies`, { headers });
-  console.log('[PII Protect] GET domain-policies', baseUrl, '→ HTTP', r.status, 'auth:', headers.Authorization ? 'Bearer' : (headers['X-Api-Key'] ? 'ApiKey' : 'none'));
+  console.log('[Pseudora] GET domain-policies', baseUrl, '→ HTTP', r.status, 'auth:', headers.Authorization ? 'Bearer' : (headers['X-Api-Key'] ? 'ApiKey' : 'none'));
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   const data = await r.json();
   return Array.isArray(data) ? data : (data.data ?? []);
@@ -442,7 +442,7 @@ async function handleAnonymize({ text, contextId, language, mode, contextType })
     // Legacy string-error shapes (auth/validation handlers).
     if (r.status === 401) throw new Error(`401 — ${err ?? 'unauthorized'}`);
     if (r.status === 403) throw new Error(`403 — ${err ?? 'forbidden'}`);
-    throw new Error(`pii-protect: HTTP ${r.status}`);
+    throw new Error(`Pseudora: HTTP ${r.status}`);
   }
   const data = await r.json();
   await chrome.storage.local.set({ lastOperation: { token_id: tokenId, type: 'anonymize', feedback_sent: false } });
@@ -467,7 +467,7 @@ async function handleDeanonymize({ text, contextId, contextType }) {
   });
   if (r.status === 401) throw new Error('401 — credentials invalid or expired. Please re-login.');
   if (r.status === 403) throw new Error('403 — access denied.');
-  if (!r.ok) throw new Error(`pii-protect: HTTP ${r.status}`);
+  if (!r.ok) throw new Error(`Pseudora: HTTP ${r.status}`);
   const data = await r.json();
   await chrome.storage.local.set({ lastOperation: { token_id: tokenId, type: 'deanonymize', feedback_sent: false } });
   return data;

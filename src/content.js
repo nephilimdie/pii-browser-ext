@@ -106,7 +106,7 @@
 
     const btn = document.createElement('button');
     btn.className = 'pii-shield-btn';
-    btn.title = 'PII Protect';
+    btn.title = 'Pseudora';
 
     const img = document.createElement('img');
     img.src = chrome.runtime.getURL('icons/icon48.png');
@@ -189,7 +189,7 @@
     hImg.width = 16; hImg.height = 16;
     hImg.style.cssText = 'border-radius:3px;flex-shrink:0;';
     titleEl.appendChild(hImg);
-    titleEl.appendChild(document.createTextNode(' PII Protect'));
+    titleEl.appendChild(document.createTextNode(' Pseudora'));
     const closeBtn = document.createElement('button');
     closeBtn.className = 'pii-panel-close';
     closeBtn.textContent = '✕';
@@ -378,8 +378,8 @@
       safeSend({ type: 'GET_CONTEXT_TYPES' }),
       safeSend({ type: 'GET_DOMAIN_POLICIES' }),
     ]);
-    console.log('[PII Protect] context-types response:', ctResp);
-    console.log('[PII Protect] domain-policies response:', dpResp);
+    console.log('[Pseudora] context-types response:', ctResp);
+    console.log('[Pseudora] domain-policies response:', dpResp);
 
     const current = selectedValue || select.value || 'generic';
 
