@@ -1,60 +1,66 @@
-# pii-browser-ext
+# Pseudora — browser extension
 
-Chrome/Firefox extension that injects a PII Protect toolbar into ChatGPT, Claude.ai and Gemini.
-Anonymizes your text before it leaves the browser — no PII reaches the LLM.
+Injects a Pseudora toolbar into ChatGPT, Claude.ai and Gemini so you can
+anonymize personal data **before** it leaves the browser. Names, emails, fiscal
+codes and IBANs are replaced with placeholders; the model never sees the
+originals.
 
-## Features
+## Install
 
-- 🔒 **Anonymize** button: replaces PII with safe placeholders before sending
-- 🔓 **Restore** button: de-anonymizes using the session context_id
-- Works on: **ChatGPT** · **Claude.ai** · **Gemini**
-- Supports tag mode (reversible) and surrogate mode (realistic fakes)
-- Settings popup: configure API URL, API key, language, mode
+From the Chrome Web Store, or unpacked for development:
 
-## Installation (Chrome)
+1. Open `chrome://extensions`, enable **Developer mode**
+2. **Load unpacked** → select this folder
 
-1. Open `chrome://extensions`
-2. Enable **Developer mode** (top right)
-3. Click **Load unpacked**
-4. Select the `pii-browser-ext` folder
+Firefox: `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on** →
+pick `manifest.json`.
 
-## Installation (Firefox)
+## Configure
 
-1. Open `about:debugging#/runtime/this-firefox`
-2. Click **Load Temporary Add-on**
-3. Select `manifest.json`
+Click the extension icon, then either:
 
-## Configuration
+- **Log in with Pseudora** — OAuth 2.0 PKCE, no key to copy around; or
+- paste a **customer API key** from
+  [pseudora.cloud/cloud/customer-keys](https://pseudora.cloud/cloud/customer-keys)
 
-Click the extension icon → fill in:
-- **API URL**: `http://localhost:15500` (or your remote pii-protect instance)
-- **API Key**: your pii-protect admin/service key
-- **Language**: document language for detection
-- **Mode**: `tag` (reversible) or `surrogate` (realistic fakes)
+Set **API URL** to `https://pseudora.cloud`, or to your own instance if you
+self-host. Saving asks Chrome for access to that origin — the extension holds no
+blanket host permission, only the three AI sites plus the endpoint you name.
 
-Click **Test connection** to verify.
+**Test connection** confirms the setup.
 
-## How to use
+## Use
 
-1. Open ChatGPT / Claude.ai / Gemini
-2. Type your message in the prompt box
-3. Click **Anonymize** — PII is replaced with `[PERSON_1]`, `[FISCAL_CODE_1]`, etc.
-4. Send the anonymized message to the LLM
-5. Copy the LLM response, paste it back, click **Restore** if needed
+1. Type your message in ChatGPT / Claude.ai / Gemini
+2. Click **Anonymize** — the text becomes `[PERSON_1]`, `[FISCAL_CODE_1]`, …
+3. Send it
+4. Paste the reply back and click **Restore** to recover the real values
 
-## Architecture
+`tag` mode is reversible; `surrogate` mode substitutes realistic fakes instead.
+
+## How it is put together
 
 ```
-content.js     — injects toolbar, reads/writes the textarea
-background.js  — makes fetch() calls to pii-protect (avoids CORS)
-popup.js       — settings UI, connection test
+content.js     injects the toolbar, reads and writes the prompt field
+background.js  the only place that touches the network (avoids CORS)
+popup.js       settings, OAuth, connection test
 ```
 
-The extension requires pii-protect to be running and reachable from the browser.
-For production use, deploy pii-protect behind HTTPS.
+Credentials live in `chrome.storage.local` and never leave the machine.
+Preferences live in `chrome.storage.sync`, so they follow your browser profile.
 
 ## Limitations
 
-- The toolbar injection is best-effort: SPA route changes may require a page refresh
-- Restore only works within the same browser session (context_id is in memory)
-- Does not intercept API calls directly — relies on manual click before sending
+- Toolbar injection is best-effort: an SPA route change may need a page refresh
+- Restore works within the session that produced the mapping
+- Nothing is intercepted automatically — you click before sending
+
+## Privacy
+
+[Privacy policy](https://pseudora.cloud/extension/privacy) ·
+[Permissions](https://pseudora.cloud/extension/permissions) ·
+[Data usage](https://pseudora.cloud/extension/data-usage)
+
+## License
+
+MIT
