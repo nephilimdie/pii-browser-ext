@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Pseudora",
   "version": "1.0.0",
-  "description": "Anonimizza i dati personali prima di inviarli a ChatGPT, Claude o Gemini. Powered by Pseudora Cloud.",
+  "description": "Strip names, emails, IBANs and tax IDs from your prompt before ChatGPT, Claude or Gemini ever sees it.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://chatgpt.com/*",
