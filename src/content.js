@@ -1,11 +1,40 @@
 (function () {
   'use strict';
 
+  /* ── Reading the composer ────────────────────────────────────────────────────
+     innerText is the obvious way to read a contenteditable and the wrong one:
+     the spec gives <p> a required line break count of 2, so the one-paragraph-
+     per-line structure these editors use comes back with every newline
+     doubled. Writing that back creates a blank line between every line, and it
+     compounds on each round trip. Walk the blocks instead — one line each. */
+  function blockText(node) {
+    let out = '';
+    const kids = [...node.childNodes];
+    kids.forEach((child, i) => {
+      if (child.nodeType === Node.TEXT_NODE) { out += child.nodeValue; return; }
+      if (child.nodeName === 'BR') {
+        // A <br> closing a block is the filler browsers add to keep an empty
+        // line visible, not a line of its own.
+        if (i !== kids.length - 1) out += '\n';
+        return;
+      }
+      out += blockText(child);
+    });
+    return out;
+  }
+
+  function readComposer(el) {
+    if (!el) return '';
+    if (typeof el.value === 'string') return el.value;   // plain <textarea>
+    const blocks = [...el.children].filter(n => n.nodeName === 'P' || n.nodeName === 'DIV');
+    return blocks.length ? blocks.map(blockText).join('\n') : blockText(el);
+  }
+
   /* ── Site adapters ──────────────────────────────────────────────────────────*/
   const ADAPTERS = {
     'chatgpt.com': {
       inputSelector: '#prompt-textarea, div[contenteditable="true"][data-lexical-editor]',
-      getText(el) { return el.innerText || el.value || ''; },
+      getText(el) { return readComposer(el); },
       setText(el, text) {
         el.focus();
         document.execCommand('selectAll', false, null);
@@ -20,7 +49,7 @@
     },
     'claude.ai': {
       inputSelector: 'fieldset div[contenteditable="true"], div[contenteditable="true"][data-placeholder]',
-      getText(el) { return el.innerText || ''; },
+      getText(el) { return readComposer(el); },
       setText(el, text) {
         el.focus();
         const sel = window.getSelection();
@@ -39,7 +68,7 @@
     },
     'gemini.google.com': {
       inputSelector: 'rich-textarea div[contenteditable="true"]',
-      getText(el) { return el.innerText || ''; },
+      getText(el) { return readComposer(el); },
       setText(el, text) {
         el.focus();
         document.execCommand('selectAll', false, null);

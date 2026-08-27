@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Pseudora",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Strip names, emails, IBANs and tax IDs from your prompt before ChatGPT, Claude or Gemini ever sees it.",
   "permissions": ["storage"],
   "host_permissions": [
