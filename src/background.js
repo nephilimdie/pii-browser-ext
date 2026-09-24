@@ -169,8 +169,12 @@ async function handleOAuthCallback({ code, state }) {
   const url   = sync.piiApiUrl;
   const clientId = sync.piiOauthClientId;
 
-  if (!local.pkceVerifier) throw new Error('PKCE verifier missing — restart the login flow.');
-  if (state && local.pkceState && state !== local.pkceState) throw new Error('OAuth state mismatch — possible CSRF.');
+  if (!local.pkceVerifier || !local.pkceState) {
+    throw new Error('PKCE session missing — restart the login flow.');
+  }
+  if (!state || state !== local.pkceState) {
+    throw new Error('OAuth state mismatch — possible CSRF.');
+  }
 
   const callbackUrl = `${url.replace(/\/$/, '')}/oauth/extension-callback`;
 
