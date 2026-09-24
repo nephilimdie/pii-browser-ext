@@ -26,6 +26,9 @@ jobs:
             node --check "$f"
           done
 
+      - name: Verify credential storage boundary
+        run: node tests/storage-boundary.mjs
+
       - name: Read manifest version
         id: meta
         run: |
