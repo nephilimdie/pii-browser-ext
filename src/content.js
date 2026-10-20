@@ -669,6 +669,10 @@
         return;
       }
 
+      if (resp?.safe !== true || typeof resp.anonymized_text !== 'string') {
+        mainPanel?._showError('Pseudora could not confirm safe processing. Nothing was sent.');
+        return;
+      }
       site.setText(currentInput, resp.anonymized_text);
       lastAnonResult = { original: originalText, anonResult: resp };
 

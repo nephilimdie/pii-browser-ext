@@ -449,6 +449,9 @@ async function handleAnonymize({ text, contextId, language, mode, contextType })
     throw new Error(`Pseudora: HTTP ${r.status}`);
   }
   const data = await r.json();
+  if (data?.safe !== true || typeof data.anonymized_text !== 'string') {
+    throw new Error('Pseudora could not confirm safe processing. Nothing was sent.');
+  }
   await chrome.storage.local.set({ lastOperation: { token_id: tokenId, type: 'anonymize', feedback_sent: false } });
   return data;
 }
