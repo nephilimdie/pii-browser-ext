@@ -11,6 +11,20 @@ permissions:
   contents: write
 
 jobs:
+  api-types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Fails if the vendored spec was edited without updating its hash, or if
+      # src/generated/ differs from what the pinned generator produces.
+      - run: npm run generate:check
+      - run: npm run typecheck
+
   build:
     runs-on: ubuntu-latest
     steps:

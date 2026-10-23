@@ -42,12 +42,35 @@ blanket host permission, only the three AI sites plus the endpoint you name.
 
 ```
 content.js     injects the toolbar, reads and writes the prompt field
+send-guard.js  decides whether an intercepted send passes, is blocked or is anonymized first
 background.js  the only place that touches the network (avoids CORS)
 popup.js       settings, OAuth, connection test
 ```
 
 Credentials live in `chrome.storage.local` and never leave the machine.
 Preferences live in `chrome.storage.sync`, so they follow your browser profile.
+
+## Regenerating the API types
+
+The extension talks to the Cloud through `src/background.js`. Request and
+response shapes come from the vendored OpenAPI spec `openapi/pseudora-cloud.yaml`
+(pinned by `openapi/pseudora-cloud.yaml.sha256`), generated into
+`src/generated/pseudora-api.d.ts` with openapi-typescript 7.13.0 and checked
+with `tsc --checkJs`. There is no bundler, so only the types are used. The
+tooling is dev-only and is not shipped in the store zip.
+
+```bash
+npm ci
+npm run generate        # rewrite src/generated/ from the spec
+npm run generate:check  # CI: spec hash matches and generated output has no diff
+npm run typecheck       # JSDoc types in background.js against the schema
+npm run lint && npm test
+```
+
+To update the contract, copy the new spec from the Cloud repo
+(`public/api/v1/openapi.yaml`), refresh the hash with
+`shasum -a 256 pseudora-cloud.yaml > pseudora-cloud.yaml.sha256` inside
+`openapi/`, run `npm run generate` and commit all three files.
 
 ## Limitations
 
