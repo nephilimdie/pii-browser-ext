@@ -56,7 +56,8 @@ jobs:
       - name: Build zip
         run: |
           zip -r "${{ steps.meta.outputs.zip }}" . \
-            -x '.git/*' '.github/*' '.gitignore' '*/.DS_Store' '.DS_Store' '*.pem' '*.crx' '*.zip'
+            -x '.git/*' '.github/*' '.gitignore' '*/.DS_Store' '.DS_Store' '*.pem' '*.crx' '*.zip' \
+               'node_modules/*' 'package.json' 'package-lock.json' 'tsconfig.json' 'openapi/*' 'src/generated/*'
           unzip -l "${{ steps.meta.outputs.zip }}"
 
       - uses: actions/upload-artifact@v4
