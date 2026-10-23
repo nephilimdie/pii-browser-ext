@@ -99,19 +99,27 @@
   let posHandler        = null;
   let interceptSend     = false;
   let isAnonymizing     = false;
+  let nativeSendAllowed = false;  // true only during our own post-anonymize click
   let storedContextType = 'generic';
   let storedMode        = 'tag';
   let selectedTeamCode  = '';
+  const guard           = globalThis.PseudoraSendGuard;
+  const EDITOR_WRITE_FAILED =
+    'Pseudora could not place the anonymized text in the editor. Nothing was sent.';
+
+  function applySettings(s) {
+    if ('interceptSend' in s) interceptSend     = s.interceptSend;
+    if ('contextType' in s)   storedContextType = s.contextType || 'generic';
+    if ('mode' in s)          storedMode        = s.mode        || 'tag';
+  }
 
   try {
-    chrome.storage.sync.get(
-      { interceptSend: false, contextType: 'generic', mode: 'tag' },
-      s => {
-        interceptSend     = s.interceptSend;
-        storedContextType = s.contextType || 'generic';
-        storedMode        = s.mode        || 'tag';
-      }
-    );
+    chrome.storage.sync.get({ interceptSend: false, contextType: 'generic', mode: 'tag' }, applySettings);
+    // Without this, enabling interception in the popup left open tabs unprotected.
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== 'sync') return;
+      applySettings(Object.fromEntries(Object.entries(changes).map(([k, c]) => [k, c.newValue])));
+    });
   } catch (_) {}
 
   /* ── Safe message sender ────────────────────────────────────────────────────*/
@@ -686,7 +694,15 @@
       if (thenSend) {
         const sendBtn = site.getSendButton?.();
         if (sendBtn && !sendBtn.disabled) {
-          setTimeout(() => { sendBtn.click(); }, 120);
+          setTimeout(() => {
+            // The site may have re-rendered the editor since; re-check right before sending.
+            if (!guard.composerHolds(site.getText(currentInput), resp.anonymized_text)) {
+              mainPanel?._showError(EDITOR_WRITE_FAILED);
+              return;
+            }
+            nativeSendAllowed = true;
+            try { sendBtn.click(); } finally { nativeSendAllowed = false; }
+          }, 120);
         }
       }
     } finally {
@@ -719,18 +735,22 @@
   }
 
   /* ── Intercept ──────────────────────────────────────────────────────────────*/
+  // A send attempt while anonymization is in flight is swallowed, not passed
+  // through: the editor still holds the original text at that point.
   async function handleIntercept(e) {
-    if (!interceptSend || isAnonymizing) return;
-    const text = site.getText(currentInput);
-    if (!text.trim()) return;
+    const action = guard.decide({
+      interceptSend, inFlight: isAnonymizing, nativeSendAllowed,
+      hasText: !!site.getText(currentInput).trim(),
+    });
+    if (action === 'pass') return;
     e.preventDefault();
     e.stopImmediatePropagation();
-    await doAnonymize({ thenSend: true });
+    if (action === 'anonymize') await doAnonymize({ thenSend: true });
   }
 
   function setupInterceptors() {
     document.addEventListener('keydown', (e) => {
-      if (!interceptSend || isAnonymizing) return;
+      if (!interceptSend) return;
       if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey) return;
       const active = document.activeElement;
       if (!currentInput || (active !== currentInput && !currentInput.contains(active))) return;
@@ -738,7 +758,7 @@
     }, true);
 
     document.addEventListener('click', (e) => {
-      if (!interceptSend || isAnonymizing) return;
+      if (!interceptSend) return;
       const sendBtn = site.getSendButton?.();
       if (!sendBtn) return;
       if (e.target === sendBtn || sendBtn.contains(e.target)) handleIntercept(e);

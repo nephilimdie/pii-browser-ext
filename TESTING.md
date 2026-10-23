@@ -27,7 +27,11 @@ Repeat the workflow on ChatGPT, Claude and Gemini:
    expose the original values.
 5. Verify `Anonymize & Send` shows a loading state and sends only after the
    anonymization request succeeds.
-6. Disable interception and confirm the extension does not alter send actions.
+6. With interception on, press Enter twice quickly: only anonymized text may
+   reach the provider, and the second press must not send the original.
+7. Toggle interception in the popup with a provider tab already open and
+   confirm the open tab follows the new setting without a reload.
+8. Disable interception and confirm the extension does not alter send actions.
 
 Record browser, provider, extension version, team, context type, mode and the
 result in the release evidence document. DOM injection is best effort and does

@@ -32,6 +32,9 @@ jobs:
       - name: Reject unsafe anonymization responses
         run: node tests/anonymize-safety.mjs
 
+      - name: Keep send interception closed
+        run: node tests/send-guard.mjs
+
       - name: Read manifest version
         id: meta
         run: |

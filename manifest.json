@@ -19,7 +19,7 @@
   "content_scripts": [
     {
       "matches": ["https://chatgpt.com/*", "https://claude.ai/*", "https://gemini.google.com/*"],
-      "js": ["src/content.js"],
+      "js": ["src/send-guard.js", "src/content.js"],
       "css": ["src/content.css"],
       "run_at": "document_idle"
     }
