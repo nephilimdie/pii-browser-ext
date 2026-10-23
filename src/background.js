@@ -408,11 +408,14 @@ async function handleGetDomainPolicies({ url, key }) {
 /** @typedef {import('./generated/pseudora-api').paths} Paths */
 /** @typedef {import('./generated/pseudora-api').components['schemas']} Schemas */
 
+const API_TIMEOUT_MS = 30_000;
+
 /**
- * Why: one typed place for the JSON encoding of every POST to the Cloud.
+ * Why: one place for the timeout and JSON encoding of every POST to the Cloud,
+ *      so a hung request rejects (fail closed) instead of waiting forever.
  * What: POSTs `body` as JSON to `${baseUrl}${path}` with the auth headers and
- *       returns the raw Response.
- * Test: tests/api-core.mjs asserts the path and body.
+ *       returns the raw Response; a timeout rejects with a user-facing error.
+ * Test: tests/api-core.mjs asserts the path, body, signal and timeout message.
  * @template {keyof Paths} P
  * @param {string} baseUrl
  * @param {P} path
@@ -420,11 +423,17 @@ async function handleGetDomainPolicies({ url, key }) {
  * @param {Paths[P] extends { post: { requestBody?: { content: { 'application/json': infer B } } } } ? B : never} body
  */
 async function postJson(baseUrl, path, headers, body) {
-  return fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify(body),
-  });
+  try {
+    return await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+      signal: globalThis.AbortSignal?.timeout(API_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err?.name === 'TimeoutError') throw new Error('Pseudora did not respond in time. Nothing was sent.');
+    throw err;
+  }
 }
 
 // ── Anonymize / deanonymize ───────────────────────────────────────────────────
@@ -501,6 +510,7 @@ async function handleDeanonymize({ text, contextId, contextType }) {
   if (!r.ok) throw new Error(`Pseudora: HTTP ${r.status}`);
   /** @type {Partial<Schemas['DeanonymizeResponse']> | null} */
   const data = await r.json();
+  if (typeof data?.restored_text !== 'string') throw new Error('Pseudora returned no restored text.');
   await chrome.storage.local.set({ lastOperation: { token_id: tokenId, type: 'deanonymize', feedback_sent: false } });
   return data;
 }

@@ -35,6 +35,9 @@ jobs:
       - name: Keep send interception closed
         run: node tests/send-guard.mjs
 
+      - name: Reject failed, malformed and slow API responses
+        run: node tests/api-core.mjs
+
       - name: Read manifest version
         id: meta
         run: |
