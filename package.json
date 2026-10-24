@@ -1,0 +1,18 @@
+{
+  "name": "pii-browser-ext",
+  "private": true,
+  "description": "Dev tooling only: the extension ships as plain files, this manifest is never packaged.",
+  "scripts": {
+    "spec:verify": "cd openapi && shasum -a 256 -c pseudora-cloud.yaml.sha256",
+    "generate": "openapi-typescript openapi/pseudora-cloud.yaml -o src/generated/pseudora-api.d.ts",
+    "generate:check": "npm run spec:verify && npm run generate && git diff --exit-code -- src/generated && test -z \"$(git status --porcelain -- src/generated)\"",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "for f in src/*.js; do node --check \"$f\" || exit 1; done",
+    "test": "for t in tests/*.mjs; do node \"$t\" || exit 1; done"
+  },
+  "devDependencies": {
+    "@types/chrome": "0.3.4",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3"
+  }
+}

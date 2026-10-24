@@ -68,12 +68,13 @@ const LOCAL_DEFAULTS = {
   selectedTeamCode: '',
 };
 
+/** @returns {Promise<typeof SYNC_DEFAULTS & typeof LOCAL_DEFAULTS>} */
 async function getSettings() {
   const [sync, local] = await Promise.all([
     chrome.storage.sync.get(SYNC_DEFAULTS),
     chrome.storage.local.get(LOCAL_DEFAULTS),
   ]);
-  return { ...sync, ...local };
+  return /** @type {typeof SYNC_DEFAULTS & typeof LOCAL_DEFAULTS} */ ({ ...sync, ...local });
 }
 
 /**
@@ -164,8 +165,10 @@ async function handleOAuthInitiate({ url, clientId }) {
 }
 
 async function handleOAuthCallback({ code, state }) {
-  const local = await chrome.storage.local.get(['pkceVerifier', 'pkceState']);
-  const sync  = await chrome.storage.sync.get(['piiApiUrl', 'piiOauthClientId']);
+  const local = /** @type {{ pkceVerifier?: string, pkceState?: string }} */ (
+    await chrome.storage.local.get(['pkceVerifier', 'pkceState']));
+  const sync  = /** @type {{ piiApiUrl: string, piiOauthClientId?: string }} */ (
+    await chrome.storage.sync.get(['piiApiUrl', 'piiOauthClientId']));
   const url   = sync.piiApiUrl;
   const clientId = sync.piiOauthClientId;
 
@@ -263,7 +266,7 @@ async function handleClearCache() {
 }
 
 async function getOAuthStatus() {
-  const local = await chrome.storage.local.get(LOCAL_DEFAULTS);
+  const local = /** @type {typeof LOCAL_DEFAULTS} */ (await chrome.storage.local.get(LOCAL_DEFAULTS));
   const valid = !!local.oauthAccessToken && (
     !local.oauthExpiresAt || Date.now() < local.oauthExpiresAt - 60_000
   );
@@ -398,6 +401,41 @@ async function handleGetDomainPolicies({ url, key }) {
   return Array.isArray(data) ? data : (data.data ?? []);
 }
 
+// ── Pseudora Cloud API core ───────────────────────────────────────────────────
+// Request and response shapes come from the vendored OpenAPI spec
+// (src/generated/pseudora-api.d.ts, regenerated with `npm run generate`).
+
+/** @typedef {import('./generated/pseudora-api').paths} Paths */
+/** @typedef {import('./generated/pseudora-api').components['schemas']} Schemas */
+
+const API_TIMEOUT_MS = 30_000;
+
+/**
+ * Why: one place for the timeout and JSON encoding of every POST to the Cloud,
+ *      so a hung request rejects (fail closed) instead of waiting forever.
+ * What: POSTs `body` as JSON to `${baseUrl}${path}` with the auth headers and
+ *       returns the raw Response; a timeout rejects with a user-facing error.
+ * Test: tests/api-core.mjs asserts the path, body, signal and timeout message.
+ * @template {keyof Paths} P
+ * @param {string} baseUrl
+ * @param {P} path
+ * @param {Record<string, string>} headers
+ * @param {Paths[P] extends { post: { requestBody?: { content: { 'application/json': infer B } } } } ? B : never} body
+ */
+async function postJson(baseUrl, path, headers, body) {
+  try {
+    return await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+      signal: globalThis.AbortSignal?.timeout(API_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err?.name === 'TimeoutError') throw new Error('Pseudora did not respond in time. Nothing was sent.');
+    throw err;
+  }
+}
+
 // ── Anonymize / deanonymize ───────────────────────────────────────────────────
 
 async function handleAnonymize({ text, contextId, language, mode, contextType }) {
@@ -414,6 +452,7 @@ async function handleAnonymize({ text, contextId, language, mode, contextType })
   const isDomain = selected.startsWith('domain:');
   const chosenMode = mode || s.mode || '';
 
+  /** @type {Schemas['AnonymizeRequest']} */
   const payload = {
     text,
     context_id:            tokenId,
@@ -428,26 +467,23 @@ async function handleAnonymize({ text, contextId, language, mode, contextType })
     payload.mode = chosenMode || 'tag';
   }
 
-  const r = await fetch(`${s.piiApiUrl.replace(/\/$/, '')}/v1/anonymize`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify(payload),
-  });
+  const r = await postJson(s.piiApiUrl, '/v1/anonymize', headers, payload);
   if (!r.ok) {
     const body = await r.json().catch(() => ({}));
     const err = body.error;
     // New boundary contract: error is an object { response_code, message, meta }.
     if (err && typeof err === 'object' && err.message) {
-      const e = new Error(err.message);
-      e.responseCode = err.response_code || '';
-      e.meta = err.meta || {};
-      throw e;
+      throw Object.assign(new Error(err.message), {
+        responseCode: err.response_code || '',
+        meta: err.meta || {},
+      });
     }
     // Legacy string-error shapes (auth/validation handlers).
     if (r.status === 401) throw new Error(`401 — ${err ?? 'unauthorized'}`);
     if (r.status === 403) throw new Error(`403 — ${err ?? 'forbidden'}`);
     throw new Error(`Pseudora: HTTP ${r.status}`);
   }
+  /** @type {Partial<Schemas['AnonymizeResponse']> | null} */
   const data = await r.json();
   if (data?.safe !== true || typeof data.anonymized_text !== 'string') {
     throw new Error('Pseudora could not confirm safe processing. Nothing was sent.');
@@ -467,21 +503,24 @@ async function handleDeanonymize({ text, contextId, contextType }) {
   // "generic" would miss the mappings and skip the restore).
   let ctForDeanon = contextType || s.contextType || 'generic';
   if (ctForDeanon.startsWith('domain:')) ctForDeanon = ctForDeanon.slice('domain:'.length);
-  const r = await fetch(`${s.piiApiUrl.replace(/\/$/, '')}/v1/deanonymize`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify({ text, context_id: tokenId, context_type: ctForDeanon }),
-  });
+  const r = await postJson(s.piiApiUrl, '/v1/deanonymize', headers,
+    { text, context_id: tokenId, context_type: ctForDeanon });
   if (r.status === 401) throw new Error('401 — credentials invalid or expired. Please re-login.');
   if (r.status === 403) throw new Error('403 — access denied.');
   if (!r.ok) throw new Error(`Pseudora: HTTP ${r.status}`);
+  /** @type {Partial<Schemas['DeanonymizeResponse']> | null} */
   const data = await r.json();
+  if (typeof data?.restored_text !== 'string') throw new Error('Pseudora returned no restored text.');
   await chrome.storage.local.set({ lastOperation: { token_id: tokenId, type: 'deanonymize', feedback_sent: false } });
   return data;
 }
 
+/** @typedef {{ token_id: string, type: Schemas['FeedbackRequest']['type'], feedback_sent: boolean }} LastOperation */
+
+/** @returns {Promise<LastOperation | null>} */
 async function getLastOperation() {
-  const { lastOperation } = await chrome.storage.local.get('lastOperation');
+  const { lastOperation } = /** @type {{ lastOperation?: LastOperation }} */ (
+    await chrome.storage.local.get('lastOperation'));
   return lastOperation ?? null;
 }
 
@@ -493,11 +532,7 @@ async function handleSubmitFeedback({ positive }) {
   if (!s.piiApiUrl) throw new Error('API URL not configured.');
 
   const headers = await getAuthHeaders(s);
-  const r = await fetch(`${s.piiApiUrl.replace(/\/$/, '')}/v1/feedback`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify({ token_id: op.token_id, type: op.type, positive }),
-  });
+  const r = await postJson(s.piiApiUrl, '/v1/feedback', headers, { token_id: op.token_id, type: op.type, positive });
 
   if (!r.ok) throw new Error(`Feedback error: HTTP ${r.status}`);
   await chrome.storage.local.set({ lastOperation: { ...op, feedback_sent: true } });

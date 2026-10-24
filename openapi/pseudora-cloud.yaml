@@ -1,0 +1,565 @@
+openapi: 3.1.0
+info:
+  title: Pseudora Cloud API
+  version: "1.1.0"
+  description: |
+    Public REST contract used by the Pseudora client SDKs (Node, Python, VS Code,
+    browser extension). The Cloud authenticates the caller, enforces quota and
+    credits, then forwards the request to the engine and returns the engine's
+    JSON body unchanged on success.
+
+    **Fail-closed contract.** A client must treat an anonymization as successful
+    only when the response is HTTP 2xx, `safe` is exactly `true` and
+    `anonymized_text` is a string. Anything else means protection was not
+    confirmed and the original text must not be released.
+
+    Two mounts serve the same controller:
+    - `https://pseudora.cloud/api/v1/*` — customer API key (`X-Api-Key`) only.
+    - `https://pseudora.cloud/v1/*` — API key **or** OAuth bearer token
+      (browser extension, VS Code, MCP). Account, catalogue and feedback
+      operations exist only on this mount.
+
+    Error bodies come in two shapes (see `ErrorResponse`): a flat string code
+    from the auth/quota middleware, or a structured object from the API
+    exception boundary. Never rely on the HTTP status alone.
+
+servers:
+  - url: https://pseudora.cloud/api
+    description: API-key mount
+  - url: https://pseudora.cloud
+    description: Extension mount (API key or OAuth bearer)
+
+security:
+  - CustomerApiKey: []
+  - OAuthBearer: []
+
+paths:
+  /v1/anonymize:
+    post:
+      operationId: anonymize
+      summary: Detect and replace PII with tokens or surrogates
+      description: |
+        `context_id` defaults to a server-generated UUID and `context_type` to
+        `generic` (unless `domain` is given). Reversible via `/v1/deanonymize`
+        with the same `context_id` and `context_type`.
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/PiiClient'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AnonymizeRequest' }
+            example:
+              text: "Mario Rossi, CF RSSMRA80A01H501U"
+              context_id: "doc-001"
+              context_type: "generic"
+              mode: "tag"
+      responses:
+        "200":
+          description: Engine result. Check `safe === true` before using it.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnonymizeResponse' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "402": { $ref: '#/components/responses/SubscriptionExpired' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "413": { $ref: '#/components/responses/PayloadTooLarge' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+        "429": { $ref: '#/components/responses/QuotaExceeded' }
+        "502": { $ref: '#/components/responses/EngineError' }
+
+  /v1/anonymize/batch:
+    post:
+      operationId: anonymizeBatch
+      summary: Anonymize several texts in one call
+      description: |
+        Items are processed independently. An item the engine could not confirm
+        as safe comes back with `status: failed` and no `output`.
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/PiiClient'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BatchAnonymizeRequest' }
+      responses:
+        "200":
+          description: Per-item results in request order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BatchAnonymizeResponse' }
+        "400": { $ref: '#/components/responses/EngineError' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "402": { $ref: '#/components/responses/SubscriptionExpired' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+        "429": { $ref: '#/components/responses/QuotaExceeded' }
+        "502": { $ref: '#/components/responses/EngineError' }
+
+  /v1/deanonymize:
+    post:
+      operationId: deanonymize
+      summary: Restore original values for an existing context
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/PiiClient'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DeanonymizeRequest' }
+      responses:
+        "200":
+          description: Restored text
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DeanonymizeResponse' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "402": { $ref: '#/components/responses/SubscriptionExpired' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+        "429": { $ref: '#/components/responses/QuotaExceeded' }
+        "502": { $ref: '#/components/responses/EngineError' }
+
+  /v1/detect:
+    post:
+      operationId: detect
+      summary: Detect PII without modifying the text
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/PiiClient'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DetectRequest' }
+      responses:
+        "200":
+          description: Detected entities ordered by start offset
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DetectResponse' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "402": { $ref: '#/components/responses/SubscriptionExpired' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+        "429": { $ref: '#/components/responses/QuotaExceeded' }
+        "502": { $ref: '#/components/responses/EngineError' }
+
+  /v1/mask:
+    post:
+      operationId: mask
+      summary: Irreversibly mask PII
+      servers:
+        - url: https://pseudora.cloud/api
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MaskRequest' }
+      responses:
+        "200":
+          description: Masked text
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MaskResponse' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "402": { $ref: '#/components/responses/SubscriptionExpired' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+        "429": { $ref: '#/components/responses/QuotaExceeded' }
+        "502": { $ref: '#/components/responses/EngineError' }
+
+  /v1/auth/me:
+    get:
+      operationId: authMe
+      summary: Describe the authenticated principal
+      servers:
+        - url: https://pseudora.cloud
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/PiiClient'
+      responses:
+        "200":
+          description: API key or OAuth user profile
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthMeResponse' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/admin/context-types:
+    get:
+      operationId: listContextTypes
+      summary: Context types visible to this client
+      servers:
+        - url: https://pseudora.cloud
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/PiiClient'
+      responses:
+        "200":
+          description: Context types (empty list when the engine is unavailable)
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ContextType' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+
+  /v1/admin/domain-policies:
+    get:
+      operationId: listDomainPolicies
+      summary: Enabled domain policies visible to this client
+      servers:
+        - url: https://pseudora.cloud
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/PiiClient'
+      responses:
+        "200":
+          description: Domain policies
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DomainPolicySummary' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+
+  /v1/feedback:
+    post:
+      operationId: submitFeedback
+      summary: Rate the last operation
+      servers:
+        - url: https://pseudora.cloud
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FeedbackRequest' }
+      responses:
+        "200": { description: Feedback stored }
+        "201": { description: Feedback stored }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+
+components:
+  securitySchemes:
+    CustomerApiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: Customer API key from Settings → Customer API Keys.
+    OAuthBearer:
+      type: http
+      scheme: bearer
+      description: Passport OAuth 2.0 access token (PKCE). Extension mount only.
+
+  parameters:
+    TeamId:
+      name: X-Team-ID
+      in: header
+      required: false
+      schema: { type: string }
+      description: Tenant code selecting the team for OAuth callers.
+    PiiClient:
+      name: X-Pii-Client
+      in: header
+      required: false
+      schema: { type: string, examples: [vscode, browser_extension] }
+      description: Client identifier used to filter client-visible catalogues.
+
+  schemas:
+    Mode:
+      type: string
+      enum: [tag, surrogate]
+
+    InlinePolicy:
+      type: object
+      properties:
+        protect: { type: array, items: { type: string } }
+        keep: { type: array, items: { type: string } }
+
+    AnonymizeRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, maxLength: 500000 }
+        context_id: { type: string, description: "Mapping scope. Server-generated when omitted." }
+        context_type: { type: string, description: "Policy key. Defaults to `generic` unless `domain` is set." }
+        domain: { type: string, description: "Invoke a domain policy directly, bypassing `context_type`." }
+        language: { type: string, examples: [it] }
+        mode: { $ref: '#/components/schemas/Mode' }
+        policy: { $ref: '#/components/schemas/InlinePolicy' }
+        detection_mode: { type: string, enum: [permissive, strict] }
+        include_entity_values: { type: boolean }
+        dry_run: { type: boolean }
+
+    PolicyMetadata:
+      type: object
+      properties:
+        id: { type: [string, "null"] }
+        version: { type: [string, "null"] }
+        hash: { type: [string, "null"] }
+
+    EntityDetail:
+      type: object
+      required: [type, start, end]
+      properties:
+        type: { type: string }
+        start: { type: integer, minimum: 0 }
+        end: { type: integer, minimum: 0 }
+        confidence: { type: number }
+        replacement: { type: string }
+        value: { type: [string, "null"], description: "Only for admin callers with `include_entity_values`." }
+
+    AnonymizeResponse:
+      type: object
+      required: [anonymized_text, safe]
+      properties:
+        anonymized_text: { type: string }
+        safe: { type: boolean, description: "Must be exactly `true` for the result to be used." }
+        entity_count: { type: integer }
+        pii_types_found: { type: array, items: { type: string } }
+        entities: { type: array, items: { $ref: '#/components/schemas/EntityDetail' } }
+        mode: { type: string }
+        policy: { $ref: '#/components/schemas/PolicyMetadata' }
+        dry_run: { type: boolean }
+        warnings: { type: [array, "null"], items: { type: string } }
+
+    BatchItemRequest:
+      type: object
+      required: [id, text]
+      properties:
+        id: { type: string }
+        text: { type: string, maxLength: 500000 }
+        context_type: { type: [string, "null"] }
+        language: { type: [string, "null"] }
+        mode: { type: [string, "null"], enum: [tag, surrogate, null] }
+        policy: { $ref: '#/components/schemas/InlinePolicy' }
+        dry_run: { type: [boolean, "null"] }
+
+    BatchAnonymizeRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/BatchItemRequest' }
+        context_type: { type: string, default: default }
+        language: { type: [string, "null"] }
+        mode: { type: [string, "null"], enum: [tag, surrogate, null] }
+        policy: { $ref: '#/components/schemas/InlinePolicy' }
+        dry_run: { type: boolean, default: true }
+
+    BatchItemResult:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [processed, failed] }
+        output: { type: [string, "null"] }
+        error_code: { type: [string, "null"] }
+        warnings: { type: [array, "null"], items: { type: string } }
+
+    BatchAnonymizeResponse:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/BatchItemResult' } }
+
+    DeanonymizeRequest:
+      type: object
+      required: [text, context_id]
+      properties:
+        text: { type: string }
+        context_id: { type: string }
+        context_type: { type: string, description: "Must match the anonymize call. Defaults to `generic`." }
+
+    DeanonymizeResponse:
+      type: object
+      required: [restored_text]
+      properties:
+        restored_text: { type: string }
+
+    DetectRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, maxLength: 500000 }
+        context_type: { type: string }
+        language: { type: string }
+        policy: { $ref: '#/components/schemas/InlinePolicy' }
+
+    DetectedEntity:
+      type: object
+      required: [type, start, end]
+      properties:
+        type: { type: string }
+        start: { type: integer, minimum: 0 }
+        end: { type: integer, minimum: 0 }
+        value: { type: string }
+        confidence: { type: number }
+
+    DetectResponse:
+      type: object
+      required: [entities]
+      properties:
+        entity_count: { type: integer }
+        pii_types_found: { type: array, items: { type: string } }
+        entities: { type: array, items: { $ref: '#/components/schemas/DetectedEntity' } }
+
+    MaskRequest:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string, maxLength: 500000 }
+        context_type: { type: string }
+        language: { type: string }
+        policy: { $ref: '#/components/schemas/InlinePolicy' }
+        mask_char: { type: string, maxLength: 4 }
+        mask_style: { type: string, enum: [fill, label, partial] }
+
+    MaskResponse:
+      type: object
+      required: [masked_text]
+      properties:
+        masked_text: { type: string }
+        entity_count: { type: integer }
+        pii_types_found: { type: array, items: { type: string } }
+        entities: { type: array, items: { $ref: '#/components/schemas/DetectedEntity' } }
+
+    Team:
+      type: object
+      required: [tenant_code]
+      properties:
+        id: { type: [string, integer] }
+        tenant_code: { type: string }
+        name: { type: string }
+
+    AuthMeResponse:
+      type: object
+      required: [id, role, auth_method, can_anonymize]
+      properties:
+        id: { type: [string, integer] }
+        name: { type: string }
+        email: { type: string }
+        role: { type: string, examples: [service, user] }
+        auth_method: { type: string, enum: [api_key, oauth] }
+        can_anonymize: { type: boolean }
+        tenant_id: { type: string }
+        scopes: { type: array, items: { type: string } }
+        teams: { type: array, items: { $ref: '#/components/schemas/Team' } }
+        current_tenant_code: { type: string }
+
+    ContextType:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string }
+        name: { type: string }
+        display_name: { type: string }
+        description: { type: string }
+        default_mode: { $ref: '#/components/schemas/Mode' }
+        domain: { type: [string, "null"] }
+
+    DomainPolicySummary:
+      type: object
+      required: [domain]
+      properties:
+        domain: { type: string }
+        display_name: { type: string }
+        default_mode: { $ref: '#/components/schemas/Mode' }
+
+    FeedbackRequest:
+      type: object
+      required: [token_id, type, positive]
+      properties:
+        token_id: { type: string }
+        type: { type: string, enum: [anonymize, deanonymize] }
+        positive: { type: boolean }
+
+    FlatError:
+      type: object
+      required: [error]
+      description: Emitted by the auth, quota and validation layers.
+      properties:
+        error:
+          type: string
+          examples:
+            - missing_api_key
+            - invalid_api_key
+            - tenant_suspended
+            - subscription_expired
+            - rate_limit_exceeded
+            - daily_limit_exceeded
+            - monthly_quota_exceeded
+            - request_too_large
+            - validation_failed
+            - acl_forbidden
+        limit: { type: integer }
+        used: { type: integer }
+        window: { type: string }
+        chars: { type: integer }
+        field: { type: string }
+        permission: { type: string }
+
+    BoundaryError:
+      type: object
+      required: [error]
+      description: Emitted by the API exception boundary (engine and policy errors).
+      properties:
+        success: { type: boolean, const: false }
+        error:
+          type: object
+          required: [response_code, message]
+          properties:
+            response_code: { type: string, examples: [ENGINE_ERROR, PII_BLOCKED] }
+            message: { type: string }
+            meta: { type: object, additionalProperties: true }
+            correlation_id: { type: string }
+
+    ErrorResponse:
+      oneOf:
+        - $ref: '#/components/schemas/FlatError'
+        - $ref: '#/components/schemas/BoundaryError'
+
+  responses:
+    Unauthorized:
+      description: Credentials missing, invalid or expired.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    SubscriptionExpired:
+      description: Subscription expired; credits cannot be consumed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Forbidden:
+      description: Tenant suspended or ACL permission missing.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    PayloadTooLarge:
+      description: Request body exceeds the HTTP size limit.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unprocessable:
+      description: Invalid payload, plan character limit, or PII blocked by policy.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    QuotaExceeded:
+      description: Rate limit, daily limit or monthly credits exhausted.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    EngineError:
+      description: Engine returned an error or is unreachable.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }

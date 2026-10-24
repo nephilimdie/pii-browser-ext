@@ -11,6 +11,20 @@ permissions:
   contents: write
 
 jobs:
+  api-types:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Fails if the vendored spec was edited without updating its hash, or if
+      # src/generated/ differs from what the pinned generator produces.
+      - run: npm run generate:check
+      - run: npm run typecheck
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -31,6 +45,12 @@ jobs:
 
       - name: Reject unsafe anonymization responses
         run: node tests/anonymize-safety.mjs
+
+      - name: Keep send interception closed
+        run: node tests/send-guard.mjs
+
+      - name: Reject failed, malformed and slow API responses
+        run: node tests/api-core.mjs
 
       - name: Read manifest version
         id: meta
@@ -53,7 +73,8 @@ jobs:
       - name: Build zip
         run: |
           zip -r "${{ steps.meta.outputs.zip }}" . \
-            -x '.git/*' '.github/*' '.gitignore' '*/.DS_Store' '.DS_Store' '*.pem' '*.crx' '*.zip'
+            -x '.git/*' '.github/*' '.gitignore' '*/.DS_Store' '.DS_Store' '*.pem' '*.crx' '*.zip' \
+               'node_modules/*' 'package.json' 'package-lock.json' 'tsconfig.json' 'openapi/*' 'src/generated/*'
           unzip -l "${{ steps.meta.outputs.zip }}"
 
       - uses: actions/upload-artifact@v4
