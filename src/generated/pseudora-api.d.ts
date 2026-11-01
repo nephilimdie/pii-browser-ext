@@ -149,6 +149,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/images/redact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redact a screenshot or photo (PNG, JPEG, WebP)
+         * @description Detects and paints over personal data (OCR text, faces, barcodes, plates;
+         *     doubtful regions are always painted) and returns the redacted image in the
+         *     same format. Charged like the Documenti page (the characters OCR read).
+         *     **Fail-closed:** use the body only when the status is 200, `Content-Type`
+         *     is `image/*` and `X-Pii-Redacted` is `true`; every error is JSON
+         *     (`safe: false`) and the original image is never returned. Nothing is stored.
+         */
+        post: operations["redactImage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/feedback": {
         parameters: {
             query?: never;
@@ -709,6 +734,83 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    redactImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /**
+                     * Format: binary
+                     * @description PNG, JPEG or WebP, max 20 MB
+                     */
+                    file: string;
+                    /** @description Domain preset, default generic_professional */
+                    domain?: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The redacted image (never the original). */
+            200: {
+                headers: {
+                    "X-Pii-Redacted"?: "true";
+                    "X-Pii-Entity-Count"?: number;
+                    "X-Pii-Visual-Count"?: number;
+                    "X-Pii-Review-Count"?: number;
+                    "X-Pii-Types"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/png": string;
+                    "image/jpeg": string;
+                    "image/webp": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Image too large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unsupported image format (HEIC */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            422: components["responses"]["Unprocessable"];
+            /** @description Credits exhausted or another document in progress */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Engine answer failed verification; nothing returned */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Protection service unavailable; nothing returned */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     submitFeedback: {

@@ -382,3 +382,24 @@
   background: #f8f9fc;
   border-top: 1px solid #eef0f6;
 }
+
+/* ── Image protection panel (src/image-guard.js) ─────────────────────────── */
+.pii-img-panel {
+  position: fixed; right: 16px; bottom: 96px; z-index: 2147483647;
+  width: min(360px, calc(100vw - 32px)); max-height: 70vh; overflow: auto;
+  background: #fff; color: #1f2937; border: 1px solid #e5e7eb; border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .18); font: 13px/1.45 system-ui, sans-serif; padding: 12px;
+}
+.pii-img-title   { font-weight: 600; margin-bottom: 8px; }
+.pii-img-body    { display: grid; gap: 8px; }
+.pii-img-previews { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 6px; }
+.pii-img-preview { width: 100%; max-height: 220px; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 6px; background: #f9fafb; }
+.pii-img-error   { color: #b91c1c; }
+.pii-img-note    { color: #6b7280; font-size: 12px; }
+.pii-img-foot    { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+@media (prefers-color-scheme: dark) {
+  .pii-img-panel { background: #1f2937; color: #f3f4f6; border-color: #374151; }
+  .pii-img-preview { border-color: #374151; background: #111827; }
+  .pii-img-error { color: #fca5a5; }
+  .pii-img-note  { color: #9ca3af; }
+}

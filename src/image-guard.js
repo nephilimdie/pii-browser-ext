@@ -89,27 +89,25 @@
 
   /**
    * Why: an image is only usable when the Cloud explicitly confirmed it.
-   * What: true for { safe: true, format in png/jpeg/webp, non-empty image_base64, type_counts object }.
+   * What: true for { safe: true, format in png/jpeg/webp, non-empty image_base64, types array }.
    * Test: safe 'true' (string), missing image or format 'gif' → false.
    */
   function validResult(r) {
     return r?.safe === true && typeof r.image_base64 === 'string' && r.image_base64.length > 0
-      && ['png', 'jpeg', 'webp'].includes(r.format) && !!r.type_counts && typeof r.type_counts === 'object';
+      && ['png', 'jpeg', 'webp'].includes(r.format) && Array.isArray(r.types);
   }
 
   /**
-   * Why: the user decides from "2 volti, 1 IBAN, 1 codice QR/a barre", not from type codes.
-   * What: merges type_counts of every result, most frequent first, Italian singular/plural.
-   * Test: [{FACE:2},{IBAN:1}] → '2 volti, 1 IBAN'; nothing → 'nessun dato personale trovato'.
+   * Why: the user decides from "3 elementi: volti, IBAN", not from type codes.
+   * What: total entity_count of every result + the distinct Italian type labels (Cloud order).
+   * Test: [{entity_count:2,types:['FACE']},{entity_count:1,types:['IBAN']}] → '3 elementi: volti, IBAN'.
    */
   function summarize(results) {
-    const total = {};
-    results.forEach(r => Object.entries(r.type_counts || {}).forEach(([t, n]) => { total[t] = (total[t] || 0) + Number(n); }));
-    const parts = Object.entries(total).sort((a, b) => b[1] - a[1]).map(([type, n]) => {
-      const [one, many] = LABELS[type] || [type.toLowerCase().replace(/_/g, ' '), type.toLowerCase().replace(/_/g, ' ')];
-      return `${n} ${n === 1 ? one : many}`;
-    });
-    return parts.length ? parts.join(', ') : 'nessun dato personale trovato';
+    const n = results.reduce((sum, r) => sum + (Number(r.entity_count) || 0), 0);
+    const labels = [...new Set(results.flatMap(r => r.types || []))]
+      .map(t => (LABELS[t] || [])[1] || t.toLowerCase().replace(/_/g, ' '));
+    if (!n && !labels.length) return 'nessun dato personale trovato';
+    return `${n} ${n === 1 ? 'elemento' : 'elementi'}${labels.length ? `: ${labels.join(', ')}` : ''}`;
   }
 
   /** "immagine-protetta-1.png": the original name never reaches the Cloud or the site. */

@@ -449,9 +449,9 @@ function postJson(baseUrl, path, headers, body) {
 /**
  * Why: images pasted into a chatbot must be redacted by the Cloud before upload;
  *      only a reply the Cloud marked safe may reach the content script.
- * What: uploads the base64 image to /v1/images/redact as multipart and returns the
- *       Cloud JSON; any HTTP error, timeout or malformed reply rejects with a
- *       `responseCode` (the Cloud error key) for the Italian message.
+ * What: uploads the base64 image to /v1/images/redact as multipart; only a 200 image/*
+ *       body with X-Pii-Redacted: true and intact magic bytes is returned (base64 + counts);
+ *       any HTTP error, timeout or malformed reply rejects with a `responseCode`.
  * Test: tests/api-core.mjs REDACT_IMAGE cases (multipart, fail-closed shapes).
  * @param {{ data: string, format: string }} msg
  */
@@ -471,17 +471,33 @@ async function handleRedactImage({ data, format }) {
   form.append('file', new Blob([bytes], { type: `image/${format}` }), `image.${format === 'jpeg' ? 'jpg' : format}`);
 
   const r = await post(s.piiApiUrl, '/v1/images/redact', { headers, body: form }, IMAGE_TIMEOUT_MS);
-  /** @type {Partial<Schemas['ImageRedactResponse']> & { error?: unknown, message?: string } | null} */
-  const body = await r.json().catch(() => null);
   if (!r.ok) {
-    const code = typeof body?.error === 'string' ? body.error : (r.status === 401 ? 'not_configured' : 'failed');
-    throw Object.assign(new Error(body?.message || `Pseudora: HTTP ${r.status}`), { responseCode: code });
+    /** @type {{ error?: unknown, message?: string } | null} */
+    const err = await r.json().catch(() => null);
+    const code = typeof err?.error === 'string' ? err.error : (r.status === 401 ? 'not_configured' : 'failed');
+    throw Object.assign(new Error(err?.message || `Pseudora: HTTP ${r.status}`), { responseCode: code });
   }
-  if (body?.safe !== true || typeof body.image_base64 !== 'string' || !body.image_base64
-    || !IMAGE_FORMATS.includes(String(body.format)) || !body.type_counts || typeof body.type_counts !== 'object') {
+  const out = /** @type {string} */ ((r.headers.get('content-type') || '').toLowerCase().split(';')[0].replace('image/', ''));
+  const png = new Uint8Array(await r.arrayBuffer());
+  if (r.status !== 200 || r.headers.get('x-pii-redacted') !== 'true' || !IMAGE_FORMATS.includes(out) || !hasSignature(png, out)) {
     throw Object.assign(new Error('Pseudora could not confirm safe processing. Nothing was sent.'), { responseCode: 'failed' });
   }
-  return body;
+  const count = (/** @type {string} */ h) => Number.parseInt(r.headers.get(h) || '0', 10) || 0;
+  let b64 = '';
+  for (let i = 0; i < png.length; i += 0x8000) b64 += String.fromCharCode(...png.subarray(i, i + 0x8000));
+  return {
+    safe: true, format: out, image_base64: btoa(b64),
+    entity_count: count('x-pii-entity-count'), visual_count: count('x-pii-visual-count'), review_regions: count('x-pii-review-count'),
+    types: (r.headers.get('x-pii-types') || '').split(',').map(t => t.trim()).filter(Boolean),
+  };
+}
+
+/** Magic bytes of a complete PNG (with IEND), JPEG (with EOI) or WebP: a truncated or foreign body is refused. */
+function hasSignature(b, format) {
+  const at = (/** @type {number[]} */ sig, off = 0) => sig.every((v, i) => b[off + i] === v);
+  if (format === 'png') return b.length > 20 && at([0x89, 0x50, 0x4e, 0x47]) && at([0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82], b.length - 8);
+  if (format === 'jpeg') return b.length > 4 && at([0xff, 0xd8]) && at([0xff, 0xd9], b.length - 2);
+  return b.length > 12 && at([0x52, 0x49, 0x46, 0x46]) && at([0x57, 0x45, 0x42, 0x50], 8);
 }
 
 // ── Anonymize / deanonymize ───────────────────────────────────────────────────

@@ -24,6 +24,9 @@ jobs:
       # src/generated/ differs from what the pinned generator produces.
       - run: npm run generate:check
       - run: npm run typecheck
+      # happy-dom (dev dependency) drives the fake ChatGPT composer.
+      - name: Intercept, fail closed and inject images in the composer
+        run: node tests/image-guard.mjs
 
   build:
     runs-on: ubuntu-latest
@@ -51,6 +54,9 @@ jobs:
 
       - name: Reject failed, malformed and slow API responses
         run: node tests/api-core.mjs
+
+      - name: Reject unconfirmed image redaction replies
+        run: node tests/image-background.mjs
 
       - name: Read manifest version
         id: meta
