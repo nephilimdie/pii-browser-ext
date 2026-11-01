@@ -474,7 +474,7 @@ async function handleRedactImage({ data, format }) {
   if (!r.ok) {
     /** @type {{ error?: unknown, message?: string } | null} */
     const err = await r.json().catch(() => null);
-    const code = typeof err?.error === 'string' ? err.error : (r.status === 401 ? 'not_configured' : 'failed');
+    const code = typeof err?.error === 'string' ? err.error : (r.status === 401 ? 'not_configured' : r.status === 404 ? 'unavailable' : 'failed');
     throw Object.assign(new Error(err?.message || `Pseudora: HTTP ${r.status}`), { responseCode: code });
   }
   const out = /** @type {string} */ ((r.headers.get('content-type') || '').toLowerCase().split(';')[0].replace('image/', ''));

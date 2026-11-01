@@ -52,6 +52,7 @@ const failures = [
   [errorJson(503, 'unavailable'), 'unavailable'],
   [() => new Response('<html>', { status: 401 }), 'not_configured'],
   [() => new Response('oops', { status: 500 }), 'failed'],
+  [() => new Response('Not Found', { status: 404 }), 'unavailable'],   // Cloud without the route
   [image(PNG, { 'X-Pii-Redacted': 'false' }), 'failed'],
   [image(PNG, { 'X-Pii-Redacted': '' }), 'failed'],
   [image(PNG, { 'Content-Type': 'application/json' }), 'failed'],
