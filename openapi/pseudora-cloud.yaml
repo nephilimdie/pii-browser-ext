@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pseudora Cloud API
-  version: "1.1.0"
+  version: "1.2.0"
   description: |
     Public REST contract used by the Pseudora client SDKs (Node, Python, VS Code,
     browser extension). The Cloud authenticates the caller, enforces quota and
@@ -227,6 +227,51 @@ paths:
                 items: { $ref: '#/components/schemas/DomainPolicySummary' }
         "401": { $ref: '#/components/responses/Unauthorized' }
         "403": { $ref: '#/components/responses/Forbidden' }
+
+  /v1/images/redact:
+    post:
+      operationId: redactImage
+      summary: Redact a screenshot or photo (PNG, JPEG, WebP)
+      description: |
+        Detects and paints over personal data (OCR text, faces, barcodes, plates;
+        doubtful regions are always painted) and returns the redacted image in the
+        same format. Charged like the Documenti page (the characters OCR read).
+        **Fail-closed:** use the body only when the status is 200, `Content-Type`
+        is `image/*` and `X-Pii-Redacted` is `true`; every error is JSON
+        (`safe: false`) and the original image is never returned. Nothing is stored.
+      servers:
+        - url: https://pseudora.cloud
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary, description: "PNG, JPEG or WebP, max 20 MB" }
+                domain: { type: string, description: "Domain preset, default generic_professional" }
+      responses:
+        "200":
+          description: The redacted image (never the original).
+          headers:
+            X-Pii-Redacted: { schema: { type: string, enum: ["true"] } }
+            X-Pii-Entity-Count: { schema: { type: integer } }
+            X-Pii-Visual-Count: { schema: { type: integer } }
+            X-Pii-Review-Count: { schema: { type: integer } }
+            X-Pii-Types: { schema: { type: string } }
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "413": { description: Image too large }
+        "415": { description: Unsupported image format (HEIC, GIF, …) }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+        "429": { description: Credits exhausted or another document in progress }
+        "502": { description: Engine answer failed verification; nothing returned }
+        "503": { description: Protection service unavailable; nothing returned }
 
   /v1/feedback:
     post:

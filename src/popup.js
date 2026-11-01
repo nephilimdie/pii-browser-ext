@@ -10,6 +10,7 @@ const SYNC_DEFAULTS = {
   contextType: 'generic',
   autoSend: false,
   interceptSend: false,
+  protectImages: true,
 };
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -31,6 +32,7 @@ Promise.all([
   $('context-type').value    = sync.contextType || 'generic';
   $('auto-send').checked     = sync.autoSend;
   $('intercept-send').checked= sync.interceptSend;
+  $('protect-images').checked= sync.protectImages !== false;
 
   const hasUrl = !!sync.piiApiUrl;
   if (!hasUrl) {
@@ -329,6 +331,7 @@ function persistSettings(url, key, clientId) {
       contextType,
       autoSend:         $('auto-send').checked,
       interceptSend:    $('intercept-send').checked,
+      protectImages:    $('protect-images').checked,
     }),
     chrome.storage.local.set({ piiApiKey: key }),
   ]).then(async () => {

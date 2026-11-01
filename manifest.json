@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Pseudora",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "description": "Strip names, emails, IBANs and tax IDs from your prompt before ChatGPT, Claude or Gemini ever sees it.",
   "permissions": ["storage"],
   "host_permissions": [
@@ -19,7 +19,7 @@
   "content_scripts": [
     {
       "matches": ["https://chatgpt.com/*", "https://claude.ai/*", "https://gemini.google.com/*"],
-      "js": ["src/send-guard.js", "src/content.js"],
+      "js": ["src/send-guard.js", "src/image-guard.js", "src/content.js"],
       "css": ["src/content.css"],
       "run_at": "document_idle"
     }

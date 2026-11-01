@@ -29,6 +29,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     GET_LAST_OPERATION:    () => getLastOperation(),
     SELECT_TEAM:           () => handleSelectTeam(msg),
     GET_TEAMS:             () => getTeams(),
+    REDACT_IMAGE:          () => handleRedactImage(msg),
   };
 
   const fn = handlers[msg.type];
@@ -54,6 +55,7 @@ const SYNC_DEFAULTS = {
   contextType: 'generic',
   autoSend: false,
   interceptSend: false,
+  protectImages: true,
   piiKeyRole: 'service',
 };
 
@@ -409,31 +411,93 @@ async function handleGetDomainPolicies({ url, key }) {
 /** @typedef {import('./generated/pseudora-api').components['schemas']} Schemas */
 
 const API_TIMEOUT_MS = 30_000;
+/** OCR runs twice (analysis, then redaction); the Cloud gives each pass up to 110 s. */
+const IMAGE_TIMEOUT_MS = 150_000;
+const IMAGE_FORMATS = ['png', 'jpeg', 'webp'];
 
 /**
- * Why: one place for the timeout and JSON encoding of every POST to the Cloud,
- *      so a hung request rejects (fail closed) instead of waiting forever.
- * What: POSTs `body` as JSON to `${baseUrl}${path}` with the auth headers and
- *       returns the raw Response; a timeout rejects with a user-facing error.
+ * Why: one place for the timeout of every POST to the Cloud, so a hung request
+ *      rejects (fail closed) instead of waiting forever.
+ * What: POSTs `init` to `${baseUrl}${path}`; a timeout rejects with a user-facing error.
  * Test: tests/api-core.mjs asserts the path, body, signal and timeout message.
+ */
+async function post(baseUrl, path, init, timeoutMs = API_TIMEOUT_MS) {
+  try {
+    return await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
+      method: 'POST', ...init, signal: globalThis.AbortSignal?.timeout(timeoutMs),
+    });
+  } catch (err) {
+    if (err?.name === 'TimeoutError') throw Object.assign(new Error('Pseudora did not respond in time. Nothing was sent.'), { responseCode: 'timeout' });
+    throw err;
+  }
+}
+
+/**
+ * What: JSON POST typed against the OpenAPI contract (see post()).
  * @template {keyof Paths} P
  * @param {string} baseUrl
  * @param {P} path
  * @param {Record<string, string>} headers
  * @param {Paths[P] extends { post: { requestBody?: { content: { 'application/json': infer B } } } } ? B : never} body
  */
-async function postJson(baseUrl, path, headers, body) {
-  try {
-    return await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify(body),
-      signal: globalThis.AbortSignal?.timeout(API_TIMEOUT_MS),
-    });
-  } catch (err) {
-    if (err?.name === 'TimeoutError') throw new Error('Pseudora did not respond in time. Nothing was sent.');
-    throw err;
+function postJson(baseUrl, path, headers, body) {
+  return post(baseUrl, path, { headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+}
+
+// ── Image redaction ───────────────────────────────────────────────────────────
+
+/**
+ * Why: images pasted into a chatbot must be redacted by the Cloud before upload;
+ *      only a reply the Cloud marked safe may reach the content script.
+ * What: uploads the base64 image to /v1/images/redact as multipart; only a 200 image/*
+ *       body with X-Pii-Redacted: true and intact magic bytes is returned (base64 + counts);
+ *       any HTTP error, timeout or malformed reply rejects with a `responseCode`.
+ * Test: tests/api-core.mjs REDACT_IMAGE cases (multipart, fail-closed shapes).
+ * @param {{ data: string, format: string }} msg
+ */
+async function handleRedactImage({ data, format }) {
+  const s = await getSettings();
+  if (!s.piiApiUrl) throw Object.assign(new Error('API URL not configured.'), { responseCode: 'not_configured' });
+  if (typeof data !== 'string' || !data || !IMAGE_FORMATS.includes(format)) {
+    throw Object.assign(new Error('Unsupported image.'), { responseCode: 'image_unsupported' });
   }
+  const headers = await getAuthHeaders(s).catch(() => {
+    throw Object.assign(new Error('Not authenticated.'), { responseCode: 'not_configured' });
+  });
+  const bin = atob(data);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const form = new FormData();
+  form.append('file', new Blob([bytes], { type: `image/${format}` }), `image.${format === 'jpeg' ? 'jpg' : format}`);
+
+  const r = await post(s.piiApiUrl, '/v1/images/redact', { headers, body: form }, IMAGE_TIMEOUT_MS);
+  if (!r.ok) {
+    /** @type {{ error?: unknown, message?: string } | null} */
+    const err = await r.json().catch(() => null);
+    const code = typeof err?.error === 'string' ? err.error : (r.status === 401 ? 'not_configured' : r.status === 404 ? 'unavailable' : 'failed');
+    throw Object.assign(new Error(err?.message || `Pseudora: HTTP ${r.status}`), { responseCode: code });
+  }
+  const out = /** @type {string} */ ((r.headers.get('content-type') || '').toLowerCase().split(';')[0].replace('image/', ''));
+  const png = new Uint8Array(await r.arrayBuffer());
+  if (r.status !== 200 || r.headers.get('x-pii-redacted') !== 'true' || !IMAGE_FORMATS.includes(out) || !hasSignature(png, out)) {
+    throw Object.assign(new Error('Pseudora could not confirm safe processing. Nothing was sent.'), { responseCode: 'failed' });
+  }
+  const count = (/** @type {string} */ h) => Number.parseInt(r.headers.get(h) || '0', 10) || 0;
+  let b64 = '';
+  for (let i = 0; i < png.length; i += 0x8000) b64 += String.fromCharCode(...png.subarray(i, i + 0x8000));
+  return {
+    safe: true, format: out, image_base64: btoa(b64),
+    entity_count: count('x-pii-entity-count'), visual_count: count('x-pii-visual-count'), review_regions: count('x-pii-review-count'),
+    types: (r.headers.get('x-pii-types') || '').split(',').map(t => t.trim()).filter(Boolean),
+  };
+}
+
+/** Magic bytes of a complete PNG (with IEND), JPEG (with EOI) or WebP: a truncated or foreign body is refused. */
+function hasSignature(b, format) {
+  const at = (/** @type {number[]} */ sig, off = 0) => sig.every((v, i) => b[off + i] === v);
+  if (format === 'png') return b.length > 20 && at([0x89, 0x50, 0x4e, 0x47]) && at([0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82], b.length - 8);
+  if (format === 'jpeg') return b.length > 4 && at([0xff, 0xd8]) && at([0xff, 0xd9], b.length - 2);
+  return b.length > 12 && at([0x52, 0x49, 0x46, 0x46]) && at([0x57, 0x45, 0x42, 0x50], 8);
 }
 
 // ── Anonymize / deanonymize ───────────────────────────────────────────────────
