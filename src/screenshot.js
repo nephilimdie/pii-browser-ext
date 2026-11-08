@@ -68,7 +68,7 @@
    */
   async function protectShot(crop, io) {
     if (crop.size > 10_000_000) return { outcome: 'error', message: G.describeError('too_large') };
-    const resp = await io.send({ type: 'REDACT_IMAGE', data: await G.fileToBase64(crop), format: 'png' });
+    const resp = await io.send({ type: 'REDACT_IMAGE', data: await G.fileToBase64(crop), format: 'png', domain: io.domain });
     if (io.cancelled?.()) return { outcome: 'cancelled' };
     if (resp?.error || !G.validResult(resp) || resp.format !== 'png') return { outcome: 'error', message: G.describeError(resp) };
     const summary = `Oscurati: ${G.summarize([resp])}.`;
@@ -216,6 +216,7 @@
       toast(TEXT.working, { actions: [['Annulla', () => { cancelled.value = true; clear('.toast'); }, 'ghost']] });
       const result = await protectShot(crop, {
         send: G.safeSend,
+        domain: msg.domain,
         route: route({ site, hasComposer: !!site?.input(document) }),
         attach: files => typeof G.attach === 'function' && G.attach(files),
         copy,

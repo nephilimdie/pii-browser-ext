@@ -30,7 +30,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     SELECT_TEAM:           () => handleSelectTeam(msg),
     GET_TEAMS:             () => getTeams(),
     REDACT_IMAGE:          () => handleRedactImage(msg),
-    START_SCREENSHOT:      () => startScreenshot(msg.tabId, msg.windowId),
+    GET_IMAGE_OPTIONS:     () => handleImageOptions(),
+    START_SCREENSHOT:      () => startScreenshot(msg.tabId, msg.windowId, msg.domain),
   };
 
   const fn = handlers[msg.type];
@@ -63,6 +64,7 @@ const SYNC_DEFAULTS = {
   autoSend: false,
   interceptSend: false,
   protectImages: true,
+  imageDomain: 'generic_professional',
   piiKeyRole: 'service',
 };
 
@@ -456,13 +458,13 @@ function postJson(baseUrl, path, headers, body) {
 /**
  * Why: images pasted into a chatbot must be redacted by the Cloud before upload;
  *      only a reply the Cloud marked safe may reach the content script.
- * What: uploads the base64 image to /v1/images/redact as multipart; only a 200 image/*
- *       body with X-Pii-Redacted: true and intact magic bytes is returned (base64 + counts);
+ * What: uploads the base64 image to /v1/images/redact as multipart; only a 200 JSON
+ *       response with safe: true, a supported format and intact image bytes is returned;
  *       any HTTP error, timeout or malformed reply rejects with a `responseCode`.
  * Test: tests/api-core.mjs REDACT_IMAGE cases (multipart, fail-closed shapes).
- * @param {{ data: string, format: string }} msg
+ * @param {{ data: string, format: string, domain?: string }} msg
  */
-async function handleRedactImage({ data, format }) {
+async function handleRedactImage({ data, format, domain }) {
   const s = await getSettings();
   if (!s.piiApiUrl) throw Object.assign(new Error('API URL not configured.'), { responseCode: 'not_configured' });
   if (typeof data !== 'string' || !data || !IMAGE_FORMATS.includes(format)) {
@@ -476,27 +478,57 @@ async function handleRedactImage({ data, format }) {
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   const form = new FormData();
   form.append('file', new Blob([bytes], { type: `image/${format}` }), `image.${format === 'jpeg' ? 'jpg' : format}`);
+  if (domain) form.append('domain', domain);
 
-  const r = await post(s.piiApiUrl, '/v1/images/redact', { headers, body: form }, IMAGE_TIMEOUT_MS);
+  // The Cloud negotiates on Accept: without it the reply is raw image bytes, which this JSON parser refuses.
+  const r = await post(s.piiApiUrl, '/v1/images/redact', { headers: { ...headers, Accept: 'application/json' }, body: form }, IMAGE_TIMEOUT_MS);
   if (!r.ok) {
     /** @type {{ error?: unknown, message?: string } | null} */
     const err = await r.json().catch(() => null);
     const code = typeof err?.error === 'string' ? err.error : (r.status === 401 ? 'not_configured' : r.status === 404 ? 'unavailable' : 'failed');
     throw Object.assign(new Error(err?.message || `Pseudora: HTTP ${r.status}`), { responseCode: code });
   }
-  const out = /** @type {string} */ ((r.headers.get('content-type') || '').toLowerCase().split(';')[0].replace('image/', ''));
-  const png = new Uint8Array(await r.arrayBuffer());
-  if (r.status !== 200 || r.headers.get('x-pii-redacted') !== 'true' || !IMAGE_FORMATS.includes(out) || !hasSignature(png, out)) {
+  const contentType = (r.headers.get('content-type') || '').toLowerCase().split(';')[0];
+  const result = contentType === 'application/json' ? await r.json().catch(() => null) : null;
+  const out = result?.format;
+  let protectedBytes;
+  try {
+    const protectedData = result?.image_base64;
+    if (typeof protectedData !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(protectedData)) throw new Error('bad base64');
+    const decoded = atob(protectedData);
+    protectedBytes = Uint8Array.from(decoded, c => c.charCodeAt(0));
+  } catch {
+    protectedBytes = new Uint8Array();
+  }
+  if (r.status !== 200 || result?.safe !== true || !IMAGE_FORMATS.includes(out) || !hasSignature(protectedBytes, out)
+      || !Number.isSafeInteger(result?.entity_count) || result.entity_count < 0
+      || typeof result?.type_counts !== 'object' || result.type_counts === null || Array.isArray(result.type_counts)) {
     throw Object.assign(new Error('Pseudora could not confirm safe processing. Nothing was sent.'), { responseCode: 'failed' });
   }
-  const count = (/** @type {string} */ h) => Number.parseInt(r.headers.get(h) || '0', 10) || 0;
-  let b64 = '';
-  for (let i = 0; i < png.length; i += 0x8000) b64 += String.fromCharCode(...png.subarray(i, i + 0x8000));
+  const types = Object.keys(result.type_counts);
+  if (!types.every(type => Number.isSafeInteger(result.type_counts[type]) && result.type_counts[type] >= 0)) {
+    throw Object.assign(new Error('Pseudora returned invalid counts.'), { responseCode: 'failed' });
+  }
   return {
-    safe: true, format: out, image_base64: btoa(b64),
-    entity_count: count('x-pii-entity-count'), visual_count: count('x-pii-visual-count'), review_regions: count('x-pii-review-count'),
-    types: (r.headers.get('x-pii-types') || '').split(',').map(t => t.trim()).filter(Boolean),
+    safe: true, format: out, image_base64: result.image_base64,
+    entity_count: result.entity_count, review_regions: Number.isSafeInteger(result.review_regions) ? result.review_regions : 0,
+    types,
   };
+}
+
+async function handleImageOptions() {
+  const s = await getSettings();
+  const headers = await getAuthHeaders(s);
+  const response = await fetch(`${s.piiApiUrl.replace(/\/$/, '')}/v1/images/options`, {
+    headers, signal: globalThis.AbortSignal?.timeout(API_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error(`Image options unavailable (HTTP ${response.status}).`);
+  const body = await response.json();
+  if (body.mode !== 'redact' || !Array.isArray(body.domains) || !body.domains.length
+      || !body.domains.every(d => typeof d.value === 'string' && typeof d.label === 'string')) {
+    throw new Error('Invalid image options.');
+  }
+  return body;
 }
 
 // ── Protected screenshot ──────────────────────────────────────────────────────
@@ -514,8 +546,9 @@ const SCREENSHOT_SCRIPTS = { PseudoraComposer: 'src/composer.js', PseudoraImageG
  *       not_capturable on chrome:// pages).
  * @param {number} tabId
  * @param {number} windowId
+ * @param {string} [domain]
  */
-async function startScreenshot(tabId, windowId) {
+async function startScreenshot(tabId, windowId, domain) {
   const s = await getSettings();
   try {
     const [probe] = await chrome.scripting.executeScript({
@@ -533,7 +566,7 @@ async function startScreenshot(tabId, windowId) {
   const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' }).catch(() => {
     throw Object.assign(new Error('Pseudora non è riuscita a catturare la scheda.'), { responseCode: 'capture_failed' });
   });
-  await chrome.tabs.sendMessage(tabId, { type: 'SCREENSHOT_START', dataUrl });
+  await chrome.tabs.sendMessage(tabId, { type: 'SCREENSHOT_START', dataUrl, domain: domain || s.imageDomain || 'generic_professional' });
   return { ok: true };
 }
 

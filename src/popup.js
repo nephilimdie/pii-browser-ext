@@ -11,6 +11,7 @@ const SYNC_DEFAULTS = {
   autoSend: false,
   interceptSend: false,
   protectImages: true,
+  imageDomain: 'generic_professional',
 };
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -33,6 +34,7 @@ Promise.all([
   $('auto-send').checked     = sync.autoSend;
   $('intercept-send').checked= sync.interceptSend;
   $('protect-images').checked= sync.protectImages !== false;
+  loadImageOptions(sync.imageDomain);
 
   const hasUrl = !!sync.piiApiUrl;
   if (!hasUrl) {
@@ -446,6 +448,24 @@ function setConn(state, label) {
 // Opening the popup granted activeTab; the service worker captures, the tab shows
 // the selection overlay, so the popup closes as soon as the overlay is up.
 
+async function loadImageOptions(selected) {
+  const response = await sendMsg({ type: 'GET_IMAGE_OPTIONS' });
+  if (!Array.isArray(response?.domains) || response.mode !== 'redact') return;
+  const select = $('shot-domain');
+  select.replaceChildren(...response.domains.map(domain => {
+    const option = document.createElement('option');
+    option.value = domain.value;
+    option.textContent = domain.label;
+    return option;
+  }));
+  select.value = response.domains.some(domain => domain.value === selected) ? selected : response.domains[0].value;
+  if (select.value !== selected) await chrome.storage.sync.set({ imageDomain: select.value });
+}
+
+$('shot-domain').addEventListener('change', () => {
+  chrome.storage.sync.set({ imageDomain: $('shot-domain').value });
+});
+
 chrome.commands?.getAll(cmds => {
   const key = cmds.find(c => c.name === 'protected-screenshot')?.shortcut;
   const kbd = document.createElement('kbd');
@@ -456,7 +476,8 @@ chrome.commands?.getAll(cmds => {
 $('shot-btn').addEventListener('click', async () => {
   $('shot-btn').disabled = true;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const resp = tab ? await sendMsg({ type: 'START_SCREENSHOT', tabId: tab.id, windowId: tab.windowId }) : null;
+  const resp = tab ? await sendMsg({ type: 'START_SCREENSHOT', tabId: tab.id, windowId: tab.windowId,
+    domain: $('shot-domain').value }) : null;
   // not_configured is explained in the tab itself, like every other outcome.
   if (resp?.ok || resp?.responseCode === 'not_configured') { window.close(); return; }
   $('shot-btn').disabled = false;
