@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Pseudora Cloud API
-  version: "1.2.0"
+  version: "1.4.0"
   description: |
     Public REST contract used by the Pseudora client SDKs (Node, Python, VS Code,
     browser extension). The Cloud authenticates the caller, enforces quota and
@@ -228,51 +228,6 @@ paths:
         "401": { $ref: '#/components/responses/Unauthorized' }
         "403": { $ref: '#/components/responses/Forbidden' }
 
-  /v1/images/redact:
-    post:
-      operationId: redactImage
-      summary: Redact a screenshot or photo (PNG, JPEG, WebP)
-      description: |
-        Detects and paints over personal data (OCR text, faces, barcodes, plates;
-        doubtful regions are always painted) and returns the redacted image in the
-        same format. Charged like the Documenti page (the characters OCR read).
-        **Fail-closed:** use the body only when the status is 200, `Content-Type`
-        is `image/*` and `X-Pii-Redacted` is `true`; every error is JSON
-        (`safe: false`) and the original image is never returned. Nothing is stored.
-      servers:
-        - url: https://pseudora.cloud
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [file]
-              properties:
-                file: { type: string, format: binary, description: "PNG, JPEG or WebP, max 20 MB" }
-                domain: { type: string, description: "Domain preset, default generic_professional" }
-      responses:
-        "200":
-          description: The redacted image (never the original).
-          headers:
-            X-Pii-Redacted: { schema: { type: string, enum: ["true"] } }
-            X-Pii-Entity-Count: { schema: { type: integer } }
-            X-Pii-Visual-Count: { schema: { type: integer } }
-            X-Pii-Review-Count: { schema: { type: integer } }
-            X-Pii-Types: { schema: { type: string } }
-          content:
-            image/png: { schema: { type: string, format: binary } }
-            image/jpeg: { schema: { type: string, format: binary } }
-            image/webp: { schema: { type: string, format: binary } }
-        "401": { $ref: '#/components/responses/Unauthorized' }
-        "403": { $ref: '#/components/responses/Forbidden' }
-        "413": { description: Image too large }
-        "415": { description: Unsupported image format (HEIC, GIF, …) }
-        "422": { $ref: '#/components/responses/Unprocessable' }
-        "429": { description: Credits exhausted or another document in progress }
-        "502": { description: Engine answer failed verification; nothing returned }
-        "503": { description: Protection service unavailable; nothing returned }
-
   /v1/feedback:
     post:
       operationId: submitFeedback
@@ -289,6 +244,84 @@ paths:
         "201": { description: Feedback stored }
         "401": { $ref: '#/components/responses/Unauthorized' }
         "422": { $ref: '#/components/responses/Unprocessable' }
+
+  /v1/images/options:
+    get:
+      operationId: imageOptions
+      summary: Document types accepted by image redaction
+      description: |
+        The engine domain presets (`domain` values) that `POST /v1/images/redact` accepts,
+        with Italian and English labels, so a client can offer a "document type" picker.
+        Images are always redacted (`mode: redact`); pseudonymization is text-only.
+        Same auth and `playground.use` permission as redact. Not charged.
+      servers:
+        - url: https://pseudora.cloud
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/PiiClient'
+      responses:
+        "200":
+          description: Accepted document types, most generic first.
+          headers:
+            Cache-Control: { schema: { type: string, examples: ["private, max-age=3600"] } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImageOptionsResponse' }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/ImageRedactError' }
+
+  /v1/images/redact:
+    post:
+      operationId: redactImage
+      summary: Redact personal data in a screenshot or photo
+      description: |
+        One JPEG, PNG or WebP image (max 10 MiB). OCR text entities, faces,
+        QR/barcodes and plates are painted over; uncertain regions stay painted.
+        Charged like a scanned page in Documenti (the characters OCR read).
+        Zero retention; any failure returns an error and never an image.
+        Requires the `playground.use` permission. Auth: OAuth bearer or `X-Api-Key`.
+
+        Content negotiation: `Accept: application/json` returns the image as base64
+        JSON; any other Accept returns the image bytes (same format as the upload)
+        with `X-Pii-*` headers. Errors are always flat JSON.
+      servers:
+        - url: https://pseudora.cloud
+      parameters:
+        - $ref: '#/components/parameters/TeamId'
+        - $ref: '#/components/parameters/PiiClient'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/ImageRedactRequest' }
+      responses:
+        "200":
+          description: "Redacted image. JSON callers check `safe === true`; binary callers check `X-Pii-Redacted: true`."
+          headers:
+            Vary: { schema: { type: string, const: Accept } }
+            X-Pii-Redacted: { description: "Binary only: `true` when every region was painted.", schema: { type: string, const: "true" } }
+            X-Pii-Entity-Count: { description: "Binary only: OCR text entities.", schema: { type: integer, minimum: 0 } }
+            X-Pii-Visual-Count: { description: "Binary only: faces, QR/barcodes, plates.", schema: { type: integer, minimum: 0 } }
+            X-Pii-Review-Count: { description: "Binary only: uncertain regions painted over.", schema: { type: integer, minimum: 0 } }
+            X-Pii-Types: { description: "Binary only: comma-separated hidden types, most frequent first.", schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImageRedactResponse' }
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "401": { $ref: '#/components/responses/Unauthorized' }
+        "402": { $ref: '#/components/responses/ImageRedactError' }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "404": { $ref: '#/components/responses/ImageRedactError' }
+        "413": { $ref: '#/components/responses/ImageRedactError' }
+        "415": { $ref: '#/components/responses/ImageRedactError' }
+        "422": { $ref: '#/components/responses/ImageRedactError' }
+        "429": { $ref: '#/components/responses/ImageRedactError' }
+        "502": { $ref: '#/components/responses/ImageRedactError' }
+        "503": { $ref: '#/components/responses/ImageRedactError' }
+        "504": { $ref: '#/components/responses/ImageRedactError' }
 
 components:
   securitySchemes:
@@ -317,6 +350,114 @@ components:
       description: Client identifier used to filter client-visible catalogues.
 
   schemas:
+    ImageRedactRequest:
+      type: object
+      required: [file]
+      properties:
+        file: { type: string, format: binary, description: "JPEG, PNG or WebP; HEIC/AVIF/GIF are refused with 415." }
+        domain:
+          type: string
+          enum: [generic_professional, contract_analysis, hr_payroll, tax_accounting, real_estate_insurance, fine_appeal, condominio]
+        face_style: { type: string, enum: [blur, pixelate, black], default: blur, description: "How faces are hidden. blur (default) and pixelate are irreversible (at most 8x8 noisy, quantized colour cells per face); black is a solid box." }
+        protection_level: { $ref: '#/components/schemas/ProtectionLevel' }
+        review_restore:
+          type: string
+          enum: ["0", "1"]
+          default: "0"
+          description: |
+            JSON replies only. `1` asks for the `review` layer when there are uncertain regions,
+            so the client can let the user restore single doubtful areas without re-uploading
+            the original. Not charged again; may add a few seconds (one more render).
+
+    ProtectionLevel:
+      type: string
+      enum: [balanced, maximum]
+      default: balanced
+      description: |
+        Detection sensitivity. `balanced` (default) is precision-tuned. `maximum` is
+        recall-first: lower ML cut-offs and uncertain single-word names kept, so it hides
+        more at the cost of a few more false positives. Any other value is refused with
+        `422 validation_failed` (`field: protection_level`) before the engine is called.
+
+    ImageRedactResponse:
+      type: object
+      required: [safe, format, content_type, image_base64, entity_count, type_counts, review_regions]
+      properties:
+        safe: { type: boolean, const: true }
+        format: { type: string, enum: [png, jpeg, webp] }
+        content_type: { type: string, enum: [image/png, image/jpeg, image/webp] }
+        image_base64: { type: string, contentEncoding: base64 }
+        entity_count: { type: integer, minimum: 0 }
+        type_counts:
+          type: object
+          additionalProperties: { type: integer, minimum: 1 }
+          description: "Hidden items by type, e.g. {FACE: 2, IBAN: 1, BARCODE: 1}."
+        review_regions: { type: integer, minimum: 0, description: "Uncertain areas painted over." }
+        review:
+          type: object
+          required: [regions, content_type, image_base64]
+          description: |
+            Present only with `review_restore=1`, at least one uncertain region and a successful
+            second render. `image_base64` is the same redaction with EVERY listed region visible
+            (text entities, faces, codes, plates, signatures and stamps still painted). A client
+            restores region N by copying, from this layer, the pixels inside N's box and outside
+            every region it keeps hidden; everything else comes from `image_base64` above.
+          properties:
+            regions:
+              type: array
+              maxItems: 200
+              items:
+                type: object
+                required: [id, reason, bbox]
+                properties:
+                  id: { type: integer, minimum: 0 }
+                  reason: { type: string, enum: [low_confidence, unrecognized_ink] }
+                  bbox:
+                    type: array
+                    minItems: 4
+                    maxItems: 4
+                    items: { type: number, minimum: 0, maximum: 1 }
+                    description: "[x0, y0, x1, y1] as fractions of the image, top-left origin."
+            content_type: { type: string, enum: [image/png, image/jpeg, image/webp] }
+            image_base64: { type: string, contentEncoding: base64 }
+
+    ImageOptionsResponse:
+      type: object
+      required: [mode, default, domains]
+      properties:
+        mode: { type: string, const: redact }
+        default: { type: string, examples: [generic_professional] }
+        domains:
+          type: array
+          items:
+            type: object
+            required: [value, label, labels]
+            properties:
+              value:
+                type: string
+                enum: [generic_professional, contract_analysis, hr_payroll, tax_accounting, real_estate_insurance, fine_appeal, condominio]
+              label: { type: string, description: "Label in the server locale." }
+              labels:
+                type: object
+                required: [it, en]
+                properties:
+                  it: { type: string }
+                  en: { type: string }
+
+    ImageRedactErrorBody:
+      type: object
+      required: [error, code, message, safe]
+      properties:
+        error:
+          type: string
+          description: "Client key: 415 image_unsupported, 413 too_large, 422 image_too_large|invalid_document|ocr_no_text|validation, 402 quota, 429 in_progress|monthly_quota_exceeded, 503 busy (Retry-After)|unavailable, 504 timeout, 502 failed."
+          examples: [image_unsupported, too_large, invalid_document, ocr_no_text, quota, in_progress, busy, timeout, unavailable, failed]
+        code:
+          type: string
+          examples: [IMAGE_FORMAT_UNSUPPORTED, IMAGE_FILE_TOO_LARGE, CREDITS_EXHAUSTED, ENGINE_BUSY, PROCESSING_TIMEOUT]
+        message: { type: string }
+        safe: { type: boolean, const: false }
+
     Mode:
       type: string
       enum: [tag, surrogate]
@@ -339,6 +480,7 @@ components:
         mode: { $ref: '#/components/schemas/Mode' }
         policy: { $ref: '#/components/schemas/InlinePolicy' }
         detection_mode: { type: string, enum: [permissive, strict] }
+        protection_level: { $ref: '#/components/schemas/ProtectionLevel' }
         include_entity_values: { type: boolean }
         dry_run: { type: boolean }
 
@@ -398,6 +540,7 @@ components:
         language: { type: [string, "null"] }
         mode: { type: [string, "null"], enum: [tag, surrogate, null] }
         policy: { $ref: '#/components/schemas/InlinePolicy' }
+        protection_level: { $ref: '#/components/schemas/ProtectionLevel' }
         dry_run: { type: boolean, default: true }
 
     BatchItemResult:
@@ -573,6 +716,13 @@ components:
         - $ref: '#/components/schemas/BoundaryError'
 
   responses:
+    ImageRedactError:
+      description: Image refused or not processed; no image is returned.
+      headers:
+        Retry-After: { description: "Seconds; always set on 503 busy.", schema: { type: integer } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ImageRedactErrorBody' }
     Unauthorized:
       description: Credentials missing, invalid or expired.
       content:

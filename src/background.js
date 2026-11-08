@@ -31,7 +31,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     GET_TEAMS:             () => getTeams(),
     REDACT_IMAGE:          () => handleRedactImage(msg),
     GET_IMAGE_OPTIONS:     () => handleImageOptions(),
-    START_SCREENSHOT:      () => startScreenshot(msg.tabId, msg.windowId, msg.domain),
+    START_SCREENSHOT:      () => startScreenshot(msg.tabId, msg.windowId),
   };
 
   const fn = handlers[msg.type];
@@ -65,6 +65,7 @@ const SYNC_DEFAULTS = {
   interceptSend: false,
   protectImages: true,
   imageDomain: 'generic_professional',
+  faceStyle: 'blur',
   piiKeyRole: 'service',
 };
 
@@ -458,13 +459,15 @@ function postJson(baseUrl, path, headers, body) {
 /**
  * Why: images pasted into a chatbot must be redacted by the Cloud before upload;
  *      only a reply the Cloud marked safe may reach the content script.
- * What: uploads the base64 image to /v1/images/redact as multipart; only a 200 JSON
- *       response with safe: true, a supported format and intact image bytes is returned;
- *       any HTTP error, timeout or malformed reply rejects with a `responseCode`.
- * Test: tests/api-core.mjs REDACT_IMAGE cases (multipart, fail-closed shapes).
- * @param {{ data: string, format: string, domain?: string }} msg
+ * What: uploads the base64 image to /v1/images/redact as multipart with the user's document
+ *       type (`domain`) and face style from storage.sync (one place for paste guard, popup and
+ *       shortcut screenshots); asks for JSON and returns it only when it is a 200 with
+ *       safe: true, a supported format, intact image bytes and sane counts; any HTTP error,
+ *       timeout or malformed reply rejects with a `responseCode` (fail closed).
+ * Test: tests/image-background.mjs (multipart fields, Accept, fail-closed shapes).
+ * @param {{ data: string, format: string }} msg
  */
-async function handleRedactImage({ data, format, domain }) {
+async function handleRedactImage({ data, format }) {
   const s = await getSettings();
   if (!s.piiApiUrl) throw Object.assign(new Error('API URL not configured.'), { responseCode: 'not_configured' });
   if (typeof data !== 'string' || !data || !IMAGE_FORMATS.includes(format)) {
@@ -478,7 +481,8 @@ async function handleRedactImage({ data, format, domain }) {
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   const form = new FormData();
   form.append('file', new Blob([bytes], { type: `image/${format}` }), `image.${format === 'jpeg' ? 'jpg' : format}`);
-  if (domain) form.append('domain', domain);
+  if (OPTION_VALUE.test(s.imageDomain)) form.append('domain', s.imageDomain);
+  form.append('face_style', FACE_STYLES.includes(s.faceStyle) ? s.faceStyle : FACE_STYLES[0]);
 
   // The Cloud negotiates on Accept: without it the reply is raw image bytes, which this JSON parser refuses.
   const r = await post(s.piiApiUrl, '/v1/images/redact', { headers: { ...headers, Accept: 'application/json' }, body: form }, IMAGE_TIMEOUT_MS);
@@ -494,7 +498,7 @@ async function handleRedactImage({ data, format, domain }) {
   let protectedBytes;
   try {
     const protectedData = result?.image_base64;
-    if (typeof protectedData !== 'string' || !/^[A-Za-z0-9+/]+={0,2}$/.test(protectedData)) throw new Error('bad base64');
+    if (typeof protectedData !== 'string' || protectedData.length % 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(protectedData)) throw new Error('bad base64');
     const decoded = atob(protectedData);
     protectedBytes = Uint8Array.from(decoded, c => c.charCodeAt(0));
   } catch {
@@ -516,19 +520,30 @@ async function handleRedactImage({ data, format, domain }) {
   };
 }
 
+/** Face styles the Cloud accepts, the default (irreversible blur) first. */
+const FACE_STYLES = ['blur', 'pixelate', 'black'];
+/** A Cloud preset id: anything else is never sent nor shown. */
+const OPTION_VALUE = /^[a-z][a-z0-9_]{0,63}$/;
+
+/**
+ * Why: the popup's "Tipo documento" list must match what /v1/images/redact accepts.
+ * What: GET /v1/images/options → { domains: [{ value, label }] } with the Italian label;
+ *       entries with a malformed value are dropped; any error rejects (popup keeps "Generico").
+ * Test: tests/image-background.mjs handleImageOptions cases.
+ */
 async function handleImageOptions() {
   const s = await getSettings();
-  const headers = await getAuthHeaders(s);
-  const response = await fetch(`${s.piiApiUrl.replace(/\/$/, '')}/v1/images/options`, {
-    headers, signal: globalThis.AbortSignal?.timeout(API_TIMEOUT_MS),
+  if (!s.piiApiUrl) throw Object.assign(new Error('API URL not configured.'), { responseCode: 'not_configured' });
+  const r = await fetch(`${s.piiApiUrl.replace(/\/$/, '')}/v1/images/options`, {
+    headers: { ...(await getAuthHeaders(s)), Accept: 'application/json' }, signal: globalThis.AbortSignal?.timeout(API_TIMEOUT_MS),
   });
-  if (!response.ok) throw new Error(`Image options unavailable (HTTP ${response.status}).`);
-  const body = await response.json();
-  if (body.mode !== 'redact' || !Array.isArray(body.domains) || !body.domains.length
-      || !body.domains.every(d => typeof d.value === 'string' && typeof d.label === 'string')) {
-    throw new Error('Invalid image options.');
-  }
-  return body;
+  if (!r.ok) throw new Error(`Image options unavailable (HTTP ${r.status}).`);
+  const body = await r.json();
+  const domains = (Array.isArray(body?.domains) ? body.domains : [])
+    .map(d => ({ value: d?.value, label: d?.labels?.it || d?.label }))
+    .filter(d => typeof d.value === 'string' && OPTION_VALUE.test(d.value) && typeof d.label === 'string' && d.label);
+  if (body?.mode !== 'redact' || !domains.length) throw new Error('Invalid image options.');
+  return { mode: 'redact', domains };
 }
 
 // ── Protected screenshot ──────────────────────────────────────────────────────
@@ -546,9 +561,8 @@ const SCREENSHOT_SCRIPTS = { PseudoraComposer: 'src/composer.js', PseudoraImageG
  *       not_capturable on chrome:// pages).
  * @param {number} tabId
  * @param {number} windowId
- * @param {string} [domain]
  */
-async function startScreenshot(tabId, windowId, domain) {
+async function startScreenshot(tabId, windowId) {
   const s = await getSettings();
   try {
     const [probe] = await chrome.scripting.executeScript({
@@ -566,7 +580,7 @@ async function startScreenshot(tabId, windowId, domain) {
   const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' }).catch(() => {
     throw Object.assign(new Error('Pseudora non è riuscita a catturare la scheda.'), { responseCode: 'capture_failed' });
   });
-  await chrome.tabs.sendMessage(tabId, { type: 'SCREENSHOT_START', dataUrl, domain: domain || s.imageDomain || 'generic_professional' });
+  await chrome.tabs.sendMessage(tabId, { type: 'SCREENSHOT_START', dataUrl });
   return { ok: true };
 }
 

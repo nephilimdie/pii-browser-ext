@@ -75,10 +75,9 @@ const plain = o => (o ? { ...o } : o);
   assert.equal(t.log.attached.length, 0);
 
   // Attach route.
-  t = io(ok, { route: 'attach', domain: 'fine_appeal' });
+  t = io(ok, { route: 'attach' });
   r = await S.protectShot(crop, t.io);
   assert.equal(r.outcome, 'attached');
-  assert.equal(t.log.sent[0].domain, 'fine_appeal');
   assert.equal(await text(t.log.attached[0]), REDACTED);
   assert.equal(t.log.attached[0].name, 'screenshot-protetto.png');
   assert.equal(t.log.copied.length, 0);
@@ -208,11 +207,6 @@ const plain = o => (o ? { ...o } : o);
   assert.deepEqual(calls[2], ['capture', 3, 'png']);
   assert.equal(calls[3][2].type, 'SCREENSHOT_START');
   assert.equal(calls[3][2].dataUrl, 'data:image/png;base64,AAAA');
-  assert.equal(calls[3][2].domain, 'generic_professional');
-
-  reset({ ...logged, imageDomain: 'fine_appeal' });
-  await start();
-  assert.equal(calls[3][2].domain, 'fine_appeal');
 
   // ChatGPT/Claude with the manifest content scripts: nothing re-injected (no duplicate paste guard).
   reset(logged, ['PseudoraComposer', 'PseudoraImageGuard', 'PseudoraScreenshot']);

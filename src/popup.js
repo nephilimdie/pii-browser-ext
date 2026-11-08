@@ -12,6 +12,7 @@ const SYNC_DEFAULTS = {
   interceptSend: false,
   protectImages: true,
   imageDomain: 'generic_professional',
+  faceStyle: 'blur',
 };
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -34,6 +35,7 @@ Promise.all([
   $('auto-send').checked     = sync.autoSend;
   $('intercept-send').checked= sync.interceptSend;
   $('protect-images').checked= sync.protectImages !== false;
+  $('face-style').value = ['blur', 'pixelate', 'black'].includes(sync.faceStyle) ? sync.faceStyle : 'blur';
   loadImageOptions(sync.imageDomain);
 
   const hasUrl = !!sync.piiApiUrl;
@@ -462,9 +464,8 @@ async function loadImageOptions(selected) {
   if (select.value !== selected) await chrome.storage.sync.set({ imageDomain: select.value });
 }
 
-$('shot-domain').addEventListener('change', () => {
-  chrome.storage.sync.set({ imageDomain: $('shot-domain').value });
-});
+$('shot-domain').addEventListener('change', () => chrome.storage.sync.set({ imageDomain: $('shot-domain').value }));
+$('face-style').addEventListener('change', () => chrome.storage.sync.set({ faceStyle: $('face-style').value }));
 
 chrome.commands?.getAll(cmds => {
   const key = cmds.find(c => c.name === 'protected-screenshot')?.shortcut;
@@ -476,8 +477,7 @@ chrome.commands?.getAll(cmds => {
 $('shot-btn').addEventListener('click', async () => {
   $('shot-btn').disabled = true;
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  const resp = tab ? await sendMsg({ type: 'START_SCREENSHOT', tabId: tab.id, windowId: tab.windowId,
-    domain: $('shot-domain').value }) : null;
+  const resp = tab ? await sendMsg({ type: 'START_SCREENSHOT', tabId: tab.id, windowId: tab.windowId }) : null;
   // not_configured is explained in the tab itself, like every other outcome.
   if (resp?.ok || resp?.responseCode === 'not_configured') { window.close(); return; }
   $('shot-btn').disabled = false;

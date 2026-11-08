@@ -149,31 +149,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/images/redact": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Redact a screenshot or photo (PNG, JPEG, WebP)
-         * @description Detects and paints over personal data (OCR text, faces, barcodes, plates;
-         *     doubtful regions are always painted) and returns the redacted image in the
-         *     same format. Charged like the Documenti page (the characters OCR read).
-         *     **Fail-closed:** use the body only when the status is 200, `Content-Type`
-         *     is `image/*` and `X-Pii-Redacted` is `true`; every error is JSON
-         *     (`safe: false`) and the original image is never returned. Nothing is stored.
-         */
-        post: operations["redactImage"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/feedback": {
         parameters: {
             query?: never;
@@ -191,10 +166,172 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/images/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Document types accepted by image redaction
+         * @description The engine domain presets (`domain` values) that `POST /v1/images/redact` accepts,
+         *     with Italian and English labels, so a client can offer a "document type" picker.
+         *     Images are always redacted (`mode: redact`); pseudonymization is text-only.
+         *     Same auth and `playground.use` permission as redact. Not charged.
+         */
+        get: operations["imageOptions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/images/redact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redact personal data in a screenshot or photo
+         * @description One JPEG, PNG or WebP image (max 10 MiB). OCR text entities, faces,
+         *     QR/barcodes and plates are painted over; uncertain regions stay painted.
+         *     Charged like a scanned page in Documenti (the characters OCR read).
+         *     Zero retention; any failure returns an error and never an image.
+         *     Requires the `playground.use` permission. Auth: OAuth bearer or `X-Api-Key`.
+         *
+         *     Content negotiation: `Accept: application/json` returns the image as base64
+         *     JSON; any other Accept returns the image bytes (same format as the upload)
+         *     with `X-Pii-*` headers. Errors are always flat JSON.
+         */
+        post: operations["redactImage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        ImageRedactRequest: {
+            /**
+             * Format: binary
+             * @description JPEG, PNG or WebP; HEIC/AVIF/GIF are refused with 415.
+             */
+            file: string;
+            /** @enum {string} */
+            domain?: "generic_professional" | "contract_analysis" | "hr_payroll" | "tax_accounting" | "real_estate_insurance" | "fine_appeal" | "condominio";
+            /**
+             * @description How faces are hidden. blur (default) and pixelate are irreversible (at most 8x8 noisy, quantized colour cells per face); black is a solid box.
+             * @default blur
+             * @enum {string}
+             */
+            face_style: "blur" | "pixelate" | "black";
+            protection_level?: components["schemas"]["ProtectionLevel"];
+            /**
+             * @description JSON replies only. `1` asks for the `review` layer when there are uncertain regions,
+             *     so the client can let the user restore single doubtful areas without re-uploading
+             *     the original. Not charged again; may add a few seconds (one more render).
+             * @default 0
+             * @enum {string}
+             */
+            review_restore: "0" | "1";
+        };
+        /**
+         * @description Detection sensitivity. `balanced` (default) is precision-tuned. `maximum` is
+         *     recall-first: lower ML cut-offs and uncertain single-word names kept, so it hides
+         *     more at the cost of a few more false positives. Any other value is refused with
+         *     `422 validation_failed` (`field: protection_level`) before the engine is called.
+         * @default balanced
+         * @enum {string}
+         */
+        ProtectionLevel: "balanced" | "maximum";
+        ImageRedactResponse: {
+            /** @constant */
+            safe: true;
+            /** @enum {string} */
+            format: "png" | "jpeg" | "webp";
+            /** @enum {string} */
+            content_type: "image/png" | "image/jpeg" | "image/webp";
+            image_base64: string;
+            entity_count: number;
+            /** @description Hidden items by type, e.g. {FACE: 2, IBAN: 1, BARCODE: 1}. */
+            type_counts: {
+                [key: string]: number;
+            };
+            /** @description Uncertain areas painted over. */
+            review_regions: number;
+            /**
+             * @description Present only with `review_restore=1`, at least one uncertain region and a successful
+             *     second render. `image_base64` is the same redaction with EVERY listed region visible
+             *     (text entities, faces, codes, plates, signatures and stamps still painted). A client
+             *     restores region N by copying, from this layer, the pixels inside N's box and outside
+             *     every region it keeps hidden; everything else comes from `image_base64` above.
+             */
+            review?: {
+                regions: {
+                    id: number;
+                    /** @enum {string} */
+                    reason: "low_confidence" | "unrecognized_ink";
+                    /** @description [x0, y0, x1, y1] as fractions of the image, top-left origin. */
+                    bbox: number[];
+                }[];
+                /** @enum {string} */
+                content_type: "image/png" | "image/jpeg" | "image/webp";
+                image_base64: string;
+            };
+        };
+        ImageOptionsResponse: {
+            /** @constant */
+            mode: "redact";
+            /** @example generic_professional */
+            default: string;
+            domains: {
+                /** @enum {string} */
+                value: "generic_professional" | "contract_analysis" | "hr_payroll" | "tax_accounting" | "real_estate_insurance" | "fine_appeal" | "condominio";
+                /** @description Label in the server locale. */
+                label: string;
+                labels: {
+                    it: string;
+                    en: string;
+                };
+            }[];
+        };
+        ImageRedactErrorBody: {
+            /**
+             * @description Client key: 415 image_unsupported, 413 too_large, 422 image_too_large|invalid_document|ocr_no_text|validation, 402 quota, 429 in_progress|monthly_quota_exceeded, 503 busy (Retry-After)|unavailable, 504 timeout, 502 failed.
+             * @example image_unsupported
+             * @example too_large
+             * @example invalid_document
+             * @example ocr_no_text
+             * @example quota
+             * @example in_progress
+             * @example busy
+             * @example timeout
+             * @example unavailable
+             * @example failed
+             */
+            error: string;
+            /**
+             * @example IMAGE_FORMAT_UNSUPPORTED
+             * @example IMAGE_FILE_TOO_LARGE
+             * @example CREDITS_EXHAUSTED
+             * @example ENGINE_BUSY
+             * @example PROCESSING_TIMEOUT
+             */
+            code: string;
+            message: string;
+            /** @constant */
+            safe: false;
+        };
         /** @enum {string} */
         Mode: "tag" | "surrogate";
         InlinePolicy: {
@@ -215,6 +352,7 @@ export interface components {
             policy?: components["schemas"]["InlinePolicy"];
             /** @enum {string} */
             detection_mode?: "permissive" | "strict";
+            protection_level?: components["schemas"]["ProtectionLevel"];
             include_entity_values?: boolean;
             dry_run?: boolean;
         };
@@ -262,6 +400,7 @@ export interface components {
             /** @enum {string|null} */
             mode?: "tag" | "surrogate" | null;
             policy?: components["schemas"]["InlinePolicy"];
+            protection_level?: components["schemas"]["ProtectionLevel"];
             /** @default true */
             dry_run: boolean;
         };
@@ -401,6 +540,17 @@ export interface components {
         ErrorResponse: components["schemas"]["FlatError"] | components["schemas"]["BoundaryError"];
     };
     responses: {
+        /** @description Image refused or not processed; no image is returned. */
+        ImageRedactError: {
+            headers: {
+                /** @description Seconds; always set on 503 busy. */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ImageRedactErrorBody"];
+            };
+        };
         /** @description Credentials missing, invalid or expired. */
         Unauthorized: {
             headers: {
@@ -736,83 +886,6 @@ export interface operations {
             403: components["responses"]["Forbidden"];
         };
     };
-    redactImage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "multipart/form-data": {
-                    /**
-                     * Format: binary
-                     * @description PNG, JPEG or WebP, max 20 MB
-                     */
-                    file: string;
-                    /** @description Domain preset, default generic_professional */
-                    domain?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description The redacted image (never the original). */
-            200: {
-                headers: {
-                    "X-Pii-Redacted"?: "true";
-                    "X-Pii-Entity-Count"?: number;
-                    "X-Pii-Visual-Count"?: number;
-                    "X-Pii-Review-Count"?: number;
-                    "X-Pii-Types"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "image/png": string;
-                    "image/jpeg": string;
-                    "image/webp": string;
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            /** @description Image too large */
-            413: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Unsupported image format (HEIC */
-            415: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            422: components["responses"]["Unprocessable"];
-            /** @description Credits exhausted or another document in progress */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Engine answer failed verification; nothing returned */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Protection service unavailable; nothing returned */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
     submitFeedback: {
         parameters: {
             query?: never;
@@ -842,6 +915,89 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             422: components["responses"]["Unprocessable"];
+        };
+    };
+    imageOptions: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant code selecting the team for OAuth callers. */
+                "X-Team-ID"?: components["parameters"]["TeamId"];
+                /** @description Client identifier used to filter client-visible catalogues. */
+                "X-Pii-Client"?: components["parameters"]["PiiClient"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Accepted document types, most generic first. */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOptionsResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["ImageRedactError"];
+        };
+    };
+    redactImage: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Tenant code selecting the team for OAuth callers. */
+                "X-Team-ID"?: components["parameters"]["TeamId"];
+                /** @description Client identifier used to filter client-visible catalogues. */
+                "X-Pii-Client"?: components["parameters"]["PiiClient"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["ImageRedactRequest"];
+            };
+        };
+        responses: {
+            /** @description Redacted image. JSON callers check `safe === true`; binary callers check `X-Pii-Redacted: true`. */
+            200: {
+                headers: {
+                    Vary?: "Accept";
+                    /** @description Binary only: `true` when every region was painted. */
+                    "X-Pii-Redacted"?: "true";
+                    /** @description Binary only: OCR text entities. */
+                    "X-Pii-Entity-Count"?: number;
+                    /** @description Binary only: faces, QR/barcodes, plates. */
+                    "X-Pii-Visual-Count"?: number;
+                    /** @description Binary only: uncertain regions painted over. */
+                    "X-Pii-Review-Count"?: number;
+                    /** @description Binary only: comma-separated hidden types, most frequent first. */
+                    "X-Pii-Types"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageRedactResponse"];
+                    "image/png": string;
+                    "image/jpeg": string;
+                    "image/webp": string;
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            402: components["responses"]["ImageRedactError"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["ImageRedactError"];
+            413: components["responses"]["ImageRedactError"];
+            415: components["responses"]["ImageRedactError"];
+            422: components["responses"]["ImageRedactError"];
+            429: components["responses"]["ImageRedactError"];
+            502: components["responses"]["ImageRedactError"];
+            503: components["responses"]["ImageRedactError"];
+            504: components["responses"]["ImageRedactError"];
         };
     };
 }

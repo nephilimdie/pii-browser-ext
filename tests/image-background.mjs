@@ -17,7 +17,9 @@ const context = vm.createContext({
   },
 });
 vm.runInContext(source, context);
-vm.runInContext(`getSettings = async () => ({ piiApiUrl: 'https://api.test/' });
+let settings = { piiApiUrl: 'https://api.test/', imageDomain: 'fine_appeal', faceStyle: 'blur' };
+context.testSettings = () => settings;
+vm.runInContext(`getSettings = async () => testSettings();
   getAuthHeaders = async () => ({ Authorization: 'Bearer t', 'X-Pii-Client': 'browser_extension' });`, context);
 const run = code => vm.runInContext(code, context);
 
@@ -31,12 +33,13 @@ const errorJson = (status, error) => () => new Response(JSON.stringify({ error, 
 
 // Success: multipart upload of the image, bearer headers, 150 s timeout signal, decoded counts.
 reply = image();
-const ok = await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png', domain: 'fine_appeal' })`);
+const ok = await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png' })`);
 assert.equal(calls[0].url, 'https://api.test/v1/images/redact');
 assert.ok(calls[0].init.body instanceof FormData, 'multipart body');
 const sent = calls[0].init.body.get('file');
 assert.equal(sent.type, 'image/png');
-assert.equal(calls[0].init.body.get('domain'), 'fine_appeal');
+assert.equal(calls[0].init.body.get('domain'), 'fine_appeal', 'document type comes from storage.sync');
+assert.equal(calls[0].init.body.get('face_style'), 'blur', 'faces blurred by default');
 assert.equal(Buffer.from(await sent.arrayBuffer()).toString(), 'original-screenshot');
 assert.equal(calls[0].init.headers.Authorization, 'Bearer t');
 assert.equal(calls[0].init.headers.Accept, 'application/json', 'without it the Cloud replies with image bytes');
@@ -47,12 +50,32 @@ assert.deepEqual({ ...ok, types: [...ok.types] }, {
   entity_count: 3, review_regions: 2, types: ['PERSON', 'FACE'],
 });
 
-reply = () => new Response(JSON.stringify({ mode: 'redact', domains: [
-  { value: 'generic_professional', label: 'Generic' }, { value: 'fine_appeal', label: 'Fine appeal' },
+// A tampered stored setting is never forwarded: no domain, faces fall back to blur.
+settings = { ...settings, imageDomain: 'x"; DROP', faceStyle: 'none' };
+await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png' })`);
+assert.equal(calls.at(-1).init.body.get('domain'), null);
+assert.equal(calls.at(-1).init.body.get('face_style'), 'blur');
+settings = { ...settings, imageDomain: 'generic_professional', faceStyle: 'black' };
+await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png' })`);
+assert.equal(calls.at(-1).init.body.get('face_style'), 'black', 'an explicit choice is sent as is');
+
+// Options: Italian label preferred, malformed entries dropped, bad shapes reject.
+reply = () => new Response(JSON.stringify({ mode: 'redact', default: 'generic_professional', domains: [
+  { value: 'generic_professional', label: 'Generic', labels: { it: 'Generico', en: 'Generic' } },
+  { value: 'fine_appeal', label: 'Fine appeal' }, { value: '<img src=x>', label: 'evil' }, { value: 'x', label: 7 },
 ] }), { headers: { 'Content-Type': 'application/json' } });
 const options = await run('handleImageOptions()');
 assert.equal(calls.at(-1).url, 'https://api.test/v1/images/options');
-assert.equal(options.domains[1].value, 'fine_appeal');
+assert.equal(calls.at(-1).init.headers.Authorization, 'Bearer t');
+assert.deepEqual(JSON.parse(JSON.stringify(options)), { mode: 'redact', domains: [
+  { value: 'generic_professional', label: 'Generico' }, { value: 'fine_appeal', label: 'Fine appeal' },
+] });
+for (const bad of [{ mode: 'pseudonymize', domains: [{ value: 'a', label: 'A' }] }, { mode: 'redact', domains: [] }, { mode: 'redact' }]) {
+  reply = () => new Response(JSON.stringify(bad), { headers: { 'Content-Type': 'application/json' } });
+  await assert.rejects(run('handleImageOptions()'));
+}
+reply = () => new Response('{}', { status: 404 });
+await assert.rejects(run('handleImageOptions()'));
 reply = image();
 
 // Fail closed: every unsafe reply rejects with a responseCode, never returns bytes.
@@ -66,6 +89,7 @@ const failures = [
   [image(PNG, { safe: false }), 'failed'],
   [image(PNG, { safe: 'true' }), 'failed'],
   [image(PNG, { image_base64: '%%%bad' }), 'failed'],
+  [image(PNG, { image_base64: 'iVBORw0' }), 'failed'],          // not a multiple of 4
   [image(PNG, { type_counts: { FACE: -1 } }), 'failed'],
   [image(PNG, { entity_count: '3' }), 'failed'],
   [image(PNG, {}, 200, 'image/png'), 'failed'],

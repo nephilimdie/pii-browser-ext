@@ -52,6 +52,10 @@ Only the redacted copy confirmed by Pseudora is ever used; on any error you get
 a message and the original is discarded. The capture is taken only after your
 click or shortcut (`activeTab`) and is never stored.
 
+Above the button, **Tipo documento** (list from the Cloud, `GET /v1/images/options`)
+and **Volti** (Sfocatura by default, Pixel or Nero) apply to screenshots and to
+pasted images alike.
+
 *Italiano:* premi **Screenshot protetto** o Alt+Shift+S, seleziona l'area,
 Pseudora la oscura e la allega a ChatGPT/Claude oppure la copia negli appunti.
 

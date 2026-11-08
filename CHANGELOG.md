@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.2.1] - 2026-11-08
+
+### Added
+- "Tipo documento" picker in the popup for screenshots and pasted images: the list comes from the Cloud (`GET /v1/images/options`, Italian labels) and falls back to "Generico" when it is unavailable; the choice is sent as `domain` to `POST /v1/images/redact` and stored in your Chrome settings
+- "Volti" choice in the popup: Sfocatura (default), Pixel or Nero; sent as `face_style`. Blur and pixel are irreversible (at most 8x8 noisy colour cells of a face remain)
+
+### Changed
+- Faces are blurred by default instead of covered with a black box
+- Paste guard, popup screenshot and the Alt+Shift+S shortcut all use the same document type and face style
+- The redacted image is requested as JSON (`Accept: application/json`), the same reply shape the desktop app uses; the vendored Cloud OpenAPI contract is updated to 1.4.0
+
+### Fixed
+- "Screenshot protetto" failed with "could not confirm safe processing" on development builds that parsed JSON without asking the Cloud for it (missing `Accept: application/json`)
+
+### Security
+- Fail closed: the image is used only when the Cloud reply is a 200 with `safe: true`, a supported format, a well-formed base64 image with intact signature and valid counts; anything else is refused and the original is never sent
+- Stored settings are validated before use: an unknown document type is not sent, an unknown face style falls back to blur
+- No new permissions
+
+### Italiano
+- Nuovo menu "Tipo documento" nel popup (elenco dal Cloud, ripiega su "Generico") e scelta "Volti": Sfocatura (predefinita), Pixel o Nero
+- I volti ora vengono sfocati in modo irreversibile invece che coperti da un riquadro nero
+- Corretto "Screenshot protetto" che falliva con "impossibile confermare l'elaborazione sicura"
+- Nessun nuovo permesso
+
 ## [1.2.0] - 2026-11-08
 
 ### Added
