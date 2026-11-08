@@ -55,3 +55,21 @@ Prerequisiti: account Pseudora con crediti, Chrome desktop.
 8. Toggle: disattiva **Proteggi anche le immagini** e salva: l'incolla di un'immagine torna al comportamento normale del sito (nessun pannello).
 9. Se l'allegato automatico non riesce, il pannello propone "Scarica immagine-protetta-1.png": scaricala e allegala a mano.
 10. In DevTools > Network della pagina (ChatGPT/Claude) verifica che nessuna richiesta di upload parta prima di "Usa immagine protetta".
+
+## Screenshot protetto (1.2.0) — guida di test manuale
+
+Prerequisiti: account Pseudora con crediti, Chrome desktop, una pagina con dati **finti**.
+
+1. Carica `pii-browser-ext-1.2.0.zip` come estensione non pacchettizzata (vedi sopra) ed effettua il login.
+2. Installazione/aggiornamento: Chrome non deve mostrare nuovi avvisi di permesso (`activeTab` e `scripting` non ne hanno).
+3. `chrome://extensions/shortcuts`: "Screenshot protetto" ha la scorciatoia Alt+Shift+S (⌥⇧S su macOS).
+4. Su una pagina qualsiasi (es. una fattura di prova) premi la scorciatoia: compare la cattura "congelata" con il suggerimento "Trascina per selezionare…". Trascina sull'area: "Protezione dello screenshot in corso…", poi "Screenshot protetto copiato negli appunti. Oscurati: …". Incolla in un editor: dati coperti.
+5. Ripeti dal pulsante **Screenshot protetto** del popup: il popup si chiude e compare la selezione.
+6. Esc durante la selezione: si chiude, nessuna richiesta a Pseudora.
+7. Su chatgpt.com e claude.ai: lo screenshot protetto compare come allegato `screenshot-protetto.png` nel campo messaggio, senza pannello di revisione e senza seconda richiesta di oscuramento. **Non premere invio.**
+8. Su gemini.google.com: copia negli appunti.
+9. Errori: esci dall'account → "Pseudora non è configurata…", nessuna cattura; rete offline dopo la selezione → messaggio d'errore; in nessun caso gli appunti o il composer ricevono l'originale.
+10. `chrome://extensions` o il Web Store: dal popup compare "Pseudora non può catturare questa pagina…"; con la scorciatoia il badge diventa "!" con il motivo nel tooltip.
+11. Intercetta invio attivo, credenziali errate: premi Invio con del testo → il pannello Pseudora si apre con l'errore, nulla viene inviato.
+
+Automatico: `node tests/screenshot.mjs` (calcolo del ritaglio con devicePixelRatio, scelta allega/appunti, fail-closed, avvio activeTab). L'e2e Playwright con Cloud simulato copre i passi 4, 6, 7 (fixture locale e chatgpt.com senza login) e 9; la scorciatoia reale (passo 3-4) va verificata a mano perché Playwright non può premere le scorciatoie del browser.

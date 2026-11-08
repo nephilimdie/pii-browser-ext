@@ -627,6 +627,17 @@
     }
   }
 
+  /**
+   * Why: an intercepted Enter that fails to anonymize is swallowed; without the panel
+   *      the user only sees that Enter "did nothing".
+   * What: opens the Pseudora panel if it is closed and shows `msg` in the Result tab.
+   * Test: tests/composer.mjs, a failing intercepted send opens the panel with the error.
+   */
+  function showError(msg) {
+    if (!mainPanel) buildMainPanel();
+    mainPanel._showError(msg);
+  }
+
   /* ── Core anonymize ─────────────────────────────────────────────────────────*/
   async function doAnonymize({ thenSend = false, contextType, mode, triggerButton = null } = {}) {
     if (!currentInput || isAnonymizing) return;
@@ -649,16 +660,12 @@
         // Blocked PII: the message is already user-facing and clear — show as-is.
         // Auth/config problems: append the settings hint.
         const isAuth = !code && (resp.error.includes('403') || resp.error.includes('401') || resp.error.includes('configured'));
-        if (mainPanel) {
-          mainPanel._showError(isAuth
-            ? resp.error + '\nOpen the extension popup → Settings.'
-            : resp.error);
-        }
+        showError(isAuth ? resp.error + '\nOpen the extension popup → Settings.' : resp.error);
         return;
       }
 
       if (resp?.safe !== true || typeof resp.anonymized_text !== 'string') {
-        mainPanel?._showError('Pseudora could not confirm safe processing. Nothing was sent.');
+        showError('Pseudora could not confirm safe processing. Nothing was sent.');
         return;
       }
       site.setText(currentInput, resp.anonymized_text);
@@ -677,7 +684,7 @@
           setTimeout(() => {
             // The site may have re-rendered the editor since; re-check right before sending.
             if (!guard.composerHolds(site.getText(currentInput), resp.anonymized_text)) {
-              mainPanel?._showError(EDITOR_WRITE_FAILED);
+              showError(EDITOR_WRITE_FAILED);
               return;
             }
             nativeSendAllowed = true;

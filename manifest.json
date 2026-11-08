@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Pseudora",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Strip names, emails, IBANs and tax IDs from your prompt before ChatGPT, Claude or Gemini ever sees it.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://claude.ai/*",
@@ -19,7 +19,7 @@
   "content_scripts": [
     {
       "matches": ["https://chatgpt.com/*", "https://claude.ai/*", "https://gemini.google.com/*"],
-      "js": ["src/composer.js", "src/send-guard.js", "src/image-guard.js", "src/content.js"],
+      "js": ["src/composer.js", "src/send-guard.js", "src/image-guard.js", "src/screenshot.js", "src/content.js"],
       "css": ["src/content.css"],
       "run_at": "document_idle"
     }
@@ -32,6 +32,12 @@
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self';"
+  },
+  "commands": {
+    "protected-screenshot": {
+      "suggested_key": { "default": "Alt+Shift+S" },
+      "description": "Screenshot protetto"
+    }
   },
   "action": {
     "default_popup": "src/popup.html",

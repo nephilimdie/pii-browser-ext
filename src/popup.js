@@ -442,6 +442,27 @@ function setConn(state, label) {
   $('conn-label').textContent = label;
 }
 
+// ── Protected screenshot ──────────────────────────────────────────────────────
+// Opening the popup granted activeTab; the service worker captures, the tab shows
+// the selection overlay, so the popup closes as soon as the overlay is up.
+
+chrome.commands?.getAll(cmds => {
+  const key = cmds.find(c => c.name === 'protected-screenshot')?.shortcut;
+  const kbd = document.createElement('kbd');
+  kbd.textContent = key || 'not set';
+  $('shot-key').replaceChildren('Shortcut: ', kbd);
+});
+
+$('shot-btn').addEventListener('click', async () => {
+  $('shot-btn').disabled = true;
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const resp = tab ? await sendMsg({ type: 'START_SCREENSHOT', tabId: tab.id, windowId: tab.windowId }) : null;
+  // not_configured is explained in the tab itself, like every other outcome.
+  if (resp?.ok || resp?.responseCode === 'not_configured') { window.close(); return; }
+  $('shot-btn').disabled = false;
+  showMsg('shot-msg', resp?.error || 'Pseudora non può catturare questa scheda.', 'err');
+});
+
 function showMsg(id, text, type) {
   const el = $(id);
   el.textContent = text;

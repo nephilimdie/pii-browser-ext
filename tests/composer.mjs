@@ -68,14 +68,13 @@ function page(host, html) {
 {
   const { window, document } = page('chatgpt.com', chatgpt2026);
   const sent = [];
+  let anonReply = { safe: true, anonymized_text: '[PERSON_1] scrive', entities: [] };
   window.chrome = {
     runtime: {
       id: 'ext', lastError: null, getURL: p => `chrome-extension://ext/${p}`,
       sendMessage(msg, cb) {
         sent.push(msg);
-        const reply = msg.type === 'ANONYMIZE'
-          ? { safe: true, anonymized_text: '[PERSON_1] scrive', entities: [] }
-          : {};
+        const reply = msg.type === 'ANONYMIZE' ? anonReply : {};
         Promise.resolve(reply).then(cb);
       },
     },
@@ -123,5 +122,20 @@ function page(host, html) {
     assert.equal(document.getElementById('pii-protect-toolbar').style.display, '');
     await sleep(500);                      // let the in-flight guard release
   }
+
+  // Intercepted Enter whose anonymization fails: nothing is sent and the panel opens with
+  // the reason, so the user knows why Enter did nothing (no panel was open before).
+  document.querySelector('#pii-main-panel .pii-panel-close').click();
+  assert.equal(!!document.getElementById('pii-main-panel'), false, 'panel closed before the failing send');
+  anonReply = { error: 'Crediti esauriti', responseCode: 'monthly_quota_exceeded' };
+  const ta = document.querySelector('textarea[name="prompt"]');
+  ta.value = 'Mario Rossi scrive';
+  assert.equal(enter(ta).defaultPrevented, true, 'failing send still swallowed');
+  await sleep(50);
+  assert.equal(submits.length, 2, 'nothing submitted when anonymization fails');
+  assert.equal(ta.value, 'Mario Rossi scrive');
+  const errPanel = document.getElementById('pii-main-panel');
+  assert.equal(!!errPanel, true, 'panel opened to explain the blocked send');
+  assert.match(errPanel.textContent, /Crediti esauriti/);
 }
 console.log('composer: ok');
