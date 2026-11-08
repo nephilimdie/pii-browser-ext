@@ -38,12 +38,31 @@ blanket host permission, only the three AI sites plus the endpoint you name.
 
 `tag` mode is reversible; `surrogate` mode substitutes realistic fakes instead.
 
+### Screenshot protetto
+
+Click **Screenshot protetto** in the popup or press **Alt+Shift+S** (⌥⇧S on
+macOS; change it in `chrome://extensions/shortcuts`). Drag over the area you
+want to share, Esc cancels. Pseudora redacts the crop (faces, names, IBANs,
+QR codes…) and then:
+
+- on ChatGPT and Claude attaches the protected image to the message box;
+- everywhere else (Gemini included) copies it to the clipboard.
+
+Only the redacted copy confirmed by Pseudora is ever used; on any error you get
+a message and the original is discarded. The capture is taken only after your
+click or shortcut (`activeTab`) and is never stored.
+
+*Italiano:* premi **Screenshot protetto** o Alt+Shift+S, seleziona l'area,
+Pseudora la oscura e la allega a ChatGPT/Claude oppure la copia negli appunti.
+
 ## How it is put together
 
 ```
 composer.js    finds each site's prompt field, form and send button (shared selectors)
 content.js     injects the toolbar, reads and writes the prompt field
 send-guard.js  decides whether an intercepted send passes, is blocked or is anonymized first
+image-guard.js redacts images pasted, dropped or attached in ChatGPT / Claude
+screenshot.js  area selection, crop and delivery of the protected screenshot
 background.js  the only place that touches the network (avoids CORS)
 popup.js       settings, OAuth, connection test
 ```
@@ -77,7 +96,8 @@ To update the contract, copy the new spec from the Cloud repo
 
 - Toolbar injection is best-effort: an SPA route change may need a page refresh
 - Restore works within the session that produced the mapping
-- Nothing is intercepted automatically — you click before sending
+- Nothing is intercepted automatically unless you turn on **Intercept send**
+- Screenshots cannot be taken of `chrome://` pages, the Chrome Web Store or the built-in PDF viewer
 
 ## Privacy
 

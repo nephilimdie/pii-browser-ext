@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.2.0] - 2026-11-08
+
+### Added
+- "Screenshot protetto": a button in the popup and a keyboard shortcut (Alt+Shift+S, ⌥⇧S on macOS; change it in `chrome://extensions/shortcuts`) capture the visible tab, let you drag over the area to share (Esc cancels) and redact it through Pseudora (`POST /v1/images/redact`) before it is used
+- On ChatGPT and Claude the protected screenshot is attached to the message box; on Gemini and every other site it is copied to the clipboard ("Screenshot protetto copiato negli appunti") with what was hidden ("4 elementi: nomi, email, …")
+
+### Fixed
+- With Intercept send on, a send blocked because anonymization failed now opens the Pseudora panel with the reason instead of leaving Enter silently doing nothing
+
+### Security
+- Fail closed: only a Cloud-confirmed redacted image is attached or copied; on any error (not logged in, credits, network, timeout) a message is shown and the original is never used. The capture lives only in memory, is never stored and is dropped once the area is cropped
+- The selection overlay runs in a closed shadow root, so the page's own scripts cannot read the capture
+- New permissions `activeTab` and `scripting` show no install warning: the tab is captured only right after your click or shortcut, and no access to all websites is requested
+
+### Italiano
+- "Screenshot protetto": pulsante nel popup e scorciatoia Alt+Shift+S (⌥⇧S su macOS, modificabile in `chrome://extensions/shortcuts`). Selezioni l'area con il mouse (Esc annulla), Pseudora la oscura e su ChatGPT/Claude la allega al messaggio; altrove la copia negli appunti
+- Fail-closed: si usa solo la copia oscurata confermata dal Cloud; in caso di errore compare un messaggio e l'originale non viene mai usato né salvato
+- Intercetta invio: se l'anonimizzazione fallisce, si apre il pannello Pseudora con il motivo
+
 ## [1.1.1] - 2026-11-08
 
 ### Fixed
