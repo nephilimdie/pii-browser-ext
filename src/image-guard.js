@@ -154,12 +154,8 @@
   });
 
   /* ── DOM wiring (ChatGPT and Claude only) ──────────────────────────────────── */
-  const SITES = {
-    'chatgpt.com': { composer: '#prompt-textarea, div[contenteditable="true"][data-lexical-editor]', root: 'form' },
-    'claude.ai': { composer: 'fieldset div[contenteditable="true"], div[contenteditable="true"][data-placeholder]', root: 'fieldset, form' },
-  };
-  const site = typeof location === 'undefined' ? null : SITES[location.hostname.replace(/^www\./, '')];
-  if (!site || typeof document === 'undefined') return;
+  const site = typeof location === 'undefined' ? null : globalThis.PseudoraComposer?.forHost(location.hostname);
+  if (!site?.images || typeof document === 'undefined') return;
 
   let interceptSend = false;
   let protectImages = true;
@@ -177,8 +173,7 @@
   } catch (_) {}
 
   const enabled = () => interceptSend && protectImages && !bypass;
-  const composer = () => document.querySelector(site.composer);
-  const composerRoot = () => { const c = composer(); return c ? (c.closest(site.root) || c.parentElement) : null; };
+  const composerRoot = () => { const c = site.input(document); return c ? site.root(c) : null; };
 
   function swallow(e) {
     e.preventDefault();

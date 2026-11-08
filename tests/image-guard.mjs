@@ -4,14 +4,15 @@ import { Window } from 'happy-dom';
 
 // Content-side image guard on a fake ChatGPT composer: originals are swallowed in the
 // capture phase, only the Cloud-confirmed copy reaches the site, failures fail closed.
+const composerSource = await readFile(new URL('../src/composer.js', import.meta.url), 'utf8');
 const source = await readFile(new URL('../src/image-guard.js', import.meta.url), 'utf8');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const REDACTED_B64 = Buffer.from('redacted-bytes').toString('base64');
 
-function boot({ host = 'chatgpt.com', sync = { interceptSend: true, protectImages: true }, reply } = {}) {
+function boot({ host = 'chatgpt.com', sync = { interceptSend: true, protectImages: true }, reply, html } = {}) {
   const window = new Window({ url: `https://${host}/` });
   const { document } = window;
-  document.body.innerHTML = '<form><div id="prompt-textarea" contenteditable="true"></div><div id="att"></div><input type="file" id="up"></form>';
+  document.body.innerHTML = html || '<form><div id="prompt-textarea" contenteditable="true"></div><div id="att"></div><input type="file" id="up"></form>';
   const sent = [];
   const storageListeners = [];
   let networkCalls = 0;
@@ -29,6 +30,7 @@ function boot({ host = 'chatgpt.com', sync = { interceptSend: true, protectImage
   };
   window.URL.createObjectURL = () => 'blob:preview';
   window.URL.revokeObjectURL = () => {};
+  window.eval(composerSource);
   window.eval(source);
   const site = [];                                   // what the page's own handlers receive
   const files = ev => [...(ev.clipboardData || ev.dataTransfer || ev.target).files].map(f => f.name);
@@ -42,7 +44,7 @@ function boot({ host = 'chatgpt.com', sync = { interceptSend: true, protectImage
     const dt = new window.DataTransfer();
     list.forEach(f => dt.items.add(f));
     const ev = new window.ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt });
-    document.getElementById('prompt-textarea').dispatchEvent(ev);
+    document.querySelector('#prompt-textarea, textarea[name="prompt"]').dispatchEvent(ev);
     return ev;
   };
   const panel = () => document.getElementById('pii-img-panel');
@@ -197,6 +199,17 @@ for (const reply of [{ error: 'Pseudora: HTTP 503', responseCode: 'unavailable' 
   assert.equal(u.sent[0].format, 'jpeg');
   u.click('Usa immagine protetta');
   assert.deepEqual(u.site.at(-1), ['change', ['immagine-protetta-1.png']]);
+}
+
+// Current chatgpt.com markup (textarea[name="prompt"], no #prompt-textarea): still intercepted.
+{
+  const html = await readFile(new URL('./fixtures/chatgpt-composer-2026-11.html', import.meta.url), 'utf8');
+  const t = boot({ reply: okReply, html });
+  const ev = t.paste([t.file('a.png', 'image/png')]);
+  assert.equal(ev.defaultPrevented, true, 'paste into the new composer is cancelled');
+  assert.deepEqual(t.site, []);
+  await sleep(20);
+  assert.equal(t.sent[0]?.type, 'REDACT_IMAGE');
 }
 
 // Other sites (Gemini): no wiring at all.

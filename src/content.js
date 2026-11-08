@@ -30,62 +30,32 @@
     return blocks.length ? blocks.map(blockText).join('\n') : blockText(el);
   }
 
-  /* ── Site adapters ──────────────────────────────────────────────────────────*/
-  const ADAPTERS = {
-    'chatgpt.com': {
-      inputSelector: '#prompt-textarea, div[contenteditable="true"][data-lexical-editor]',
-      getText(el) { return readComposer(el); },
-      setText(el, text) {
-        el.focus();
-        document.execCommand('selectAll', false, null);
-        document.execCommand('insertText', false, text);
-      },
-      anchorSelector: 'form',
-      getSendButton() {
-        return document.querySelector('button[data-testid="send-button"]')
-          || document.querySelector('button[aria-label="Send prompt"]')
-          || document.querySelector('button[aria-label="Send message"]');
-      },
-    },
-    'claude.ai': {
-      inputSelector: 'fieldset div[contenteditable="true"], div[contenteditable="true"][data-placeholder]',
-      getText(el) { return readComposer(el); },
-      setText(el, text) {
-        el.focus();
-        const sel = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        sel.removeAllRanges();
-        sel.addRange(range);
-        document.execCommand('insertText', false, text);
-      },
-      anchorSelector: 'fieldset, form',
-      getSendButton() {
-        return document.querySelector('button[aria-label="Send Message"]')
-          || document.querySelector('button[data-value="send"]')
-          || document.querySelector('button[aria-label="Send message"]');
-      },
-    },
-    'gemini.google.com': {
-      inputSelector: 'rich-textarea div[contenteditable="true"]',
-      getText(el) { return readComposer(el); },
-      setText(el, text) {
-        el.focus();
-        document.execCommand('selectAll', false, null);
-        document.execCommand('insertText', false, text);
-      },
-      anchorSelector: 'form',
-      getSendButton() {
-        return document.querySelector('button[aria-label="Send message"]')
-          || document.querySelector('button.send-button');
-      },
-    },
-  };
+  /* ── Writing the composer ────────────────────────────────────────────────────
+     Replace everything through the editing pipeline so the site's own state
+     (React, ProseMirror, Lexical, Quill) sees a user edit. A plain <textarea>
+     falls back to the native value setter plus an input event. */
+  function writeComposer(el, text) {
+    el.focus();
+    if (typeof el.value === 'string') el.select();
+    else {
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+    if (document.execCommand('insertText', false, text) || typeof el.value !== 'string') return;
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(el, text);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  }
 
-  const hostname    = location.hostname.replace('www.', '');
-  const adapterKey  = Object.keys(ADAPTERS).find(k => hostname.includes(k));
-  if (!adapterKey) return;
-  const site = ADAPTERS[adapterKey];
+  const composer = globalThis.PseudoraComposer?.forHost(location.hostname);
+  if (!composer) return;
+  const site = {
+    getText: readComposer,
+    setText: writeComposer,
+    getSendButton: () => composer.sendButton(document),
+  };
 
   /* ── State ──────────────────────────────────────────────────────────────────*/
   let contextId         = null;
@@ -161,33 +131,43 @@
     return { bar, btn };
   }
 
+  /** display:contents wrappers have no box; measure the nearest ancestor that renders. */
+  function boxOf(el) {
+    while (el && !el.getClientRects().length) el = el.parentElement;
+    return el;
+  }
+
+  // Overlay beside the composer (never inside it): the site's pill layout is untouched.
   function positionToolbar() {
     if (!toolbar?.bar) return;
-    const el = anchorEl || currentInput;
+    const el = boxOf(anchorEl) || boxOf(currentInput);
+    toolbar.bar.style.display = el ? '' : 'none';
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    const W = 52, H = 58;
+    const bar = toolbar.bar.getBoundingClientRect();
+    const W = bar.width || 70, H = bar.height || 40;
     let left = rect.right + 10;
-    if (left + W > window.innerWidth - 4) left = rect.left - W - 10;
     let top = rect.top + rect.height / 2 - H / 2;
+    // No room on the right (narrow window, sidebar open): sit above the pill's right end.
+    if (left + W > window.innerWidth - 4) { left = Math.max(4, rect.right - W); top = rect.top - H - 8; }
     top = Math.max(8, Math.min(top, window.innerHeight - H - 8));
     toolbar.bar.style.left = `${left}px`;
     toolbar.bar.style.top  = `${top}px`;
   }
 
-  function injectToolbar(inputEl) {
-    if (document.getElementById('pii-protect-toolbar')) return;
-    currentInput = inputEl;
-    anchorEl = inputEl.closest(site.anchorSelector) || inputEl.parentElement;
+  function injectToolbar() {
+    if (toolbar?.bar.isConnected) return;
+    document.getElementById('pii-protect-toolbar')?.remove();
     const { bar, btn } = createToolbar();
     toolbar = { bar, btn };
     bar.style.position = 'fixed';
     bar.style.zIndex   = '9998';
     document.body.appendChild(bar);
-    positionToolbar();
-    posHandler = positionToolbar;
-    window.addEventListener('scroll', posHandler, true);
-    window.addEventListener('resize', posHandler);
+    if (!posHandler) {
+      posHandler = positionToolbar;
+      window.addEventListener('scroll', posHandler, true);
+      window.addEventListener('resize', posHandler);
+    }
   }
 
   /* ── Context types & modes ──────────────────────────────────────────────────*/
@@ -765,17 +745,24 @@
     }, true);
   }
 
-  /* ── Injection ──────────────────────────────────────────────────────────────*/
-  let injected = false;
-  const observer = new MutationObserver(() => {
-    if (injected && document.getElementById('pii-protect-toolbar')) return;
-    const el = document.querySelector(site.inputSelector);
-    if (el) { injected = true; injectToolbar(el); currentInput = el; }
-    else { injected = false; }
-  });
+  /* ── Injection ──────────────────────────────────────────────────────────────
+     SPA navigation (home <-> conversation) and re-renders replace the editor:
+     re-resolve it on every DOM change so the toolbar and the send guard always
+     follow the live element. Batched to one pass per frame. */
+  function syncComposer() {
+    syncQueued = false;
+    const el = composer.input(document);
+    if (el !== currentInput) { currentInput = el; anchorEl = el && composer.root(el); }
+    if (el) injectToolbar();
+    positionToolbar();
+  }
+  let syncQueued = false;
+  new MutationObserver(() => {
+    if (syncQueued) return;
+    syncQueued = true;
+    requestAnimationFrame(syncComposer);
+  }).observe(document.documentElement, { childList: true, subtree: true });
 
   setupInterceptors();
-  observer.observe(document.body, { childList: true, subtree: true });
-  const initEl = document.querySelector(site.inputSelector);
-  if (initEl) { injected = true; injectToolbar(initEl); }
+  syncComposer();
 })();

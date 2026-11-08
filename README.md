@@ -41,6 +41,7 @@ blanket host permission, only the three AI sites plus the endpoint you name.
 ## How it is put together
 
 ```
+composer.js    finds each site's prompt field, form and send button (shared selectors)
 content.js     injects the toolbar, reads and writes the prompt field
 send-guard.js  decides whether an intercepted send passes, is blocked or is anonymized first
 background.js  the only place that touches the network (avoids CORS)

@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.1] - 2026-11-08
+
+### Fixed
+- ChatGPT: the Pseudora toolbar did not appear on the current chatgpt.com composer (a plain `textarea[name="prompt"]` replaced `#prompt-textarea`), so prompts and images could not be protected; the localized send button (`data-composer-submit`) is now recognised too
+- The toolbar and the send/image guards follow the editor when the site re-renders it (home ↔ conversation) instead of holding on to the old one
+- The toolbar sits above the composer when there is no room beside it, and next to Gemini's whole input pill instead of over its buttons
+
+### Changed
+- Composer selectors live in one shared module (`src/composer.js`) used by both the text and the image guard
+
+### Italiano
+- ChatGPT: la barra Pseudora non compariva più con il nuovo campo di testo di chatgpt.com; ora viene rilevato, anche dopo il passaggio tra home e conversazione
+- La barra si posiziona sopra il campo quando manca spazio a destra; su Gemini non copre più i pulsanti
+
 ## [1.1.0] - 2026-11-01
 
 ### Added
