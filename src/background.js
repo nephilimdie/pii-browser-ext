@@ -30,6 +30,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     SELECT_TEAM:           () => handleSelectTeam(msg),
     GET_TEAMS:             () => getTeams(),
     REDACT_IMAGE:          () => handleRedactImage(msg),
+    START_SCREENSHOT:      () => startScreenshot(msg.tabId, msg.windowId),
   };
 
   const fn = handlers[msg.type];
@@ -40,6 +41,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     meta: err.meta || {},
   }));
   return true;
+});
+
+// The shortcut grants activeTab exactly like a toolbar click; errors surface on the badge.
+chrome.commands?.onCommand.addListener((command, tab) => {
+  if (command !== 'protected-screenshot' || tab?.id === undefined) return;
+  startScreenshot(tab.id, tab.windowId).catch(err => flagError(tab.id, err.message));
 });
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -490,6 +497,52 @@ async function handleRedactImage({ data, format }) {
     entity_count: count('x-pii-entity-count'), visual_count: count('x-pii-visual-count'), review_regions: count('x-pii-review-count'),
     types: (r.headers.get('x-pii-types') || '').split(',').map(t => t.trim()).filter(Boolean),
   };
+}
+
+// ── Protected screenshot ──────────────────────────────────────────────────────
+
+/** Injected on demand (activeTab) where the manifest content scripts do not run. */
+const SCREENSHOT_SCRIPTS = { PseudoraComposer: 'src/composer.js', PseudoraImageGuard: 'src/image-guard.js', PseudoraScreenshot: 'src/screenshot.js' };
+
+/**
+ * Why: "Screenshot protetto" (popup button or Alt+Shift+S) must work on any tab with only
+ *      activeTab: no <all_urls>, no desktopCapture, nothing captured without a user gesture.
+ * What: refuses early when Pseudora has no URL/credentials, otherwise captures the visible
+ *       tab as PNG and hands it to src/screenshot.js (injected if missing) for the area
+ *       selection. The capture is never stored: it lives only in this call and the message.
+ * Test: tests/screenshot.mjs (capture + inject order, not_configured skips the capture,
+ *       not_capturable on chrome:// pages).
+ * @param {number} tabId
+ * @param {number} windowId
+ */
+async function startScreenshot(tabId, windowId) {
+  const s = await getSettings();
+  try {
+    const [probe] = await chrome.scripting.executeScript({
+      target: { tabId }, func: names => names.filter(n => !(n in globalThis)), args: [Object.keys(SCREENSHOT_SCRIPTS)],
+    });
+    const missing = /** @type {string[]} */ (probe?.result ?? Object.keys(SCREENSHOT_SCRIPTS));
+    if (missing.length) await chrome.scripting.executeScript({ target: { tabId }, files: missing.map(n => SCREENSHOT_SCRIPTS[n]) });
+  } catch {
+    throw Object.assign(new Error('Pseudora non può catturare questa pagina (pagine di Chrome, Web Store, PDF).'), { responseCode: 'not_capturable' });
+  }
+  if (!s.piiApiUrl || !(s.oauthAccessToken || s.oauthRefreshToken || s.piiApiKey)) {
+    await chrome.tabs.sendMessage(tabId, { type: 'SCREENSHOT_START', error: 'not_configured' });
+    return { ok: false, responseCode: 'not_configured' };
+  }
+  const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' }).catch(() => {
+    throw Object.assign(new Error('Pseudora non è riuscita a catturare la scheda.'), { responseCode: 'capture_failed' });
+  });
+  await chrome.tabs.sendMessage(tabId, { type: 'SCREENSHOT_START', dataUrl });
+  return { ok: true };
+}
+
+/** Keyboard-shortcut failures have no popup to show them: a red "!" badge with the reason as tooltip. */
+function flagError(tabId, message) {
+  chrome.action.setBadgeBackgroundColor({ tabId, color: '#dc2626' });
+  chrome.action.setBadgeText({ tabId, text: '!' });
+  chrome.action.setTitle({ tabId, title: `Pseudora: ${message}` });
+  setTimeout(() => { chrome.action.setBadgeText({ tabId, text: '' }); chrome.action.setTitle({ tabId, title: 'Pseudora' }); }, 8000);
 }
 
 /** Magic bytes of a complete PNG (with IEND), JPEG (with EOI) or WebP: a truncated or foreign body is refused. */

@@ -29,6 +29,8 @@ jobs:
         run: node tests/image-guard.mjs
       - name: Detect the live composer markup and follow re-renders
         run: node tests/composer.mjs
+      - name: Protected screenshot (crop math, routing, fail closed, activeTab start)
+        run: node tests/screenshot.mjs
 
   build:
     runs-on: ubuntu-latest

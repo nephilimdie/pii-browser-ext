@@ -30,6 +30,6 @@ assert.doesNotMatch(content, /if \(!interceptSend \|\| isAnonymizing\) return;/)
 assert.match(content, /guard\.composerHolds\(site\.getText\(currentInput\), resp\.anonymized_text\)/);
 assert.match(content, /chrome\.storage\.onChanged\.addListener/);
 const manifest = JSON.parse(await readFile(new URL('../manifest.json', import.meta.url), 'utf8'));
-assert.deepEqual(manifest.content_scripts[0].js, ['src/composer.js', 'src/send-guard.js', 'src/image-guard.js', 'src/content.js']);
+assert.deepEqual(manifest.content_scripts[0].js, ['src/composer.js', 'src/send-guard.js', 'src/image-guard.js', 'src/screenshot.js', 'src/content.js']);
 
 console.log('send_guard_ok');

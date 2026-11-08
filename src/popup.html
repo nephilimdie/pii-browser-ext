@@ -26,6 +26,13 @@
   Set the API URL below, then login or enter an API key to get started.
 </div>
 
+<!-- Protected screenshot -->
+<div class="shot-row">
+  <button class="btn-primary" id="shot-btn" type="button">Screenshot protetto</button>
+  <div class="shot-hint">Select an area of this tab: Pseudora redacts it, then attaches it to ChatGPT/Claude or copies it to the clipboard. <span id="shot-key"></span></div>
+  <div id="shot-msg" class="msg"></div>
+</div>
+
 <!-- Tabs -->
 <div class="tabs">
   <button class="tab active" data-tab="preferences">Preferences</button>
@@ -205,6 +212,7 @@
       <li>Send the anonymized text to the AI</li>
       <li>Click <strong>🔓 Restore</strong> if you need the original back</li>
     </ol>
+    <p class="help-text"><strong>Screenshot protetto</strong>: press the button above (or the shortcut, changeable in <code>chrome://extensions/shortcuts</code>), drag over the area to share, Esc cancels. Only the redacted copy is ever used.</p>
   </div>
   <div class="help-section">
     <div class="help-title">Supported sites</div>

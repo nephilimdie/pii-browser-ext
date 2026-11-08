@@ -59,6 +59,12 @@ body {
   border-bottom: 1px solid #fde68a;
 }
 
+/* ── Protected screenshot ───────────────────────────────────────────────── */
+.shot-row { padding: 12px 14px 4px; background: #fff; border-bottom: 1px solid #e6e9f2; }
+.shot-row .btn-primary { width: 100%; }
+.shot-hint { margin-top: 6px; font-size: 11px; color: #5b647a; line-height: 1.45; }
+.shot-hint kbd { font: inherit; font-weight: 700; color: #39415a; }
+
 /* ── Tabs ───────────────────────────────────────────────────────────────── */
 .tabs {
   display: flex;

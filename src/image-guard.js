@@ -147,10 +147,13 @@
   }
 
   const timing = { verifyMs: 5000, pollMs: 250 };
+  let attachImpl = null;      // set by the DOM wiring on ChatGPT / Claude
 
   globalThis.PseudoraImageGuard = Object.freeze({
     classify, plan, describeError, validResult, summarize, protectedName, base64ToBytes, fileToBase64, safeSend,
     formatOf, timing, MAX_IMAGES,
+    /** Hands already-protected files to the composer (screenshot.js); false when there is none. */
+    attach: files => !!attachImpl?.(files),
   });
 
   /* ── DOM wiring (ChatGPT and Claude only) ──────────────────────────────────── */
@@ -217,6 +220,13 @@
     if (e.type === 'input') swallowChange.add(input);
     protect(p, { origin: 'input', target: input });
   }
+
+  attachImpl = files => {
+    const input = site.input(document);
+    if (!input) return false;
+    deliver(files, { origin: 'paste', target: input });   // bypass: not intercepted again
+    return true;
+  };
 
   window.addEventListener('paste', onPaste, true);
   window.addEventListener('drop', onDrop, true);
