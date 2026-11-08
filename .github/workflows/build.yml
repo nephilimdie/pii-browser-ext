@@ -27,6 +27,8 @@ jobs:
       # happy-dom (dev dependency) drives the fake ChatGPT composer.
       - name: Intercept, fail closed and inject images in the composer
         run: node tests/image-guard.mjs
+      - name: Detect the live composer markup and follow re-renders
+        run: node tests/composer.mjs
 
   build:
     runs-on: ubuntu-latest
