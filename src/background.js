@@ -30,6 +30,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     SELECT_TEAM:           () => handleSelectTeam(msg),
     GET_TEAMS:             () => getTeams(),
     REDACT_IMAGE:          () => handleRedactImage(msg),
+    GET_IMAGE_OPTIONS:     () => handleImageOptions(),
     START_SCREENSHOT:      () => startScreenshot(msg.tabId, msg.windowId),
   };
 
@@ -63,6 +64,8 @@ const SYNC_DEFAULTS = {
   autoSend: false,
   interceptSend: false,
   protectImages: true,
+  imageDomain: 'generic_professional',
+  faceStyle: 'blur',
   piiKeyRole: 'service',
 };
 
@@ -456,10 +459,12 @@ function postJson(baseUrl, path, headers, body) {
 /**
  * Why: images pasted into a chatbot must be redacted by the Cloud before upload;
  *      only a reply the Cloud marked safe may reach the content script.
- * What: uploads the base64 image to /v1/images/redact as multipart; only a 200 image/*
- *       body with X-Pii-Redacted: true and intact magic bytes is returned (base64 + counts);
- *       any HTTP error, timeout or malformed reply rejects with a `responseCode`.
- * Test: tests/api-core.mjs REDACT_IMAGE cases (multipart, fail-closed shapes).
+ * What: uploads the base64 image to /v1/images/redact as multipart with the user's document
+ *       type (`domain`) and face style from storage.sync (one place for paste guard, popup and
+ *       shortcut screenshots); asks for JSON and returns it only when it is a 200 with
+ *       safe: true, a supported format, intact image bytes and sane counts; any HTTP error,
+ *       timeout or malformed reply rejects with a `responseCode` (fail closed).
+ * Test: tests/image-background.mjs (multipart fields, Accept, fail-closed shapes).
  * @param {{ data: string, format: string }} msg
  */
 async function handleRedactImage({ data, format }) {
@@ -476,27 +481,69 @@ async function handleRedactImage({ data, format }) {
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   const form = new FormData();
   form.append('file', new Blob([bytes], { type: `image/${format}` }), `image.${format === 'jpeg' ? 'jpg' : format}`);
+  if (OPTION_VALUE.test(s.imageDomain)) form.append('domain', s.imageDomain);
+  form.append('face_style', FACE_STYLES.includes(s.faceStyle) ? s.faceStyle : FACE_STYLES[0]);
 
-  const r = await post(s.piiApiUrl, '/v1/images/redact', { headers, body: form }, IMAGE_TIMEOUT_MS);
+  // The Cloud negotiates on Accept: without it the reply is raw image bytes, which this JSON parser refuses.
+  const r = await post(s.piiApiUrl, '/v1/images/redact', { headers: { ...headers, Accept: 'application/json' }, body: form }, IMAGE_TIMEOUT_MS);
   if (!r.ok) {
     /** @type {{ error?: unknown, message?: string } | null} */
     const err = await r.json().catch(() => null);
     const code = typeof err?.error === 'string' ? err.error : (r.status === 401 ? 'not_configured' : r.status === 404 ? 'unavailable' : 'failed');
     throw Object.assign(new Error(err?.message || `Pseudora: HTTP ${r.status}`), { responseCode: code });
   }
-  const out = /** @type {string} */ ((r.headers.get('content-type') || '').toLowerCase().split(';')[0].replace('image/', ''));
-  const png = new Uint8Array(await r.arrayBuffer());
-  if (r.status !== 200 || r.headers.get('x-pii-redacted') !== 'true' || !IMAGE_FORMATS.includes(out) || !hasSignature(png, out)) {
+  const contentType = (r.headers.get('content-type') || '').toLowerCase().split(';')[0];
+  const result = contentType === 'application/json' ? await r.json().catch(() => null) : null;
+  const out = result?.format;
+  let protectedBytes;
+  try {
+    const protectedData = result?.image_base64;
+    if (typeof protectedData !== 'string' || protectedData.length % 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(protectedData)) throw new Error('bad base64');
+    const decoded = atob(protectedData);
+    protectedBytes = Uint8Array.from(decoded, c => c.charCodeAt(0));
+  } catch {
+    protectedBytes = new Uint8Array();
+  }
+  if (r.status !== 200 || result?.safe !== true || !IMAGE_FORMATS.includes(out) || !hasSignature(protectedBytes, out)
+      || !Number.isSafeInteger(result?.entity_count) || result.entity_count < 0
+      || typeof result?.type_counts !== 'object' || result.type_counts === null || Array.isArray(result.type_counts)) {
     throw Object.assign(new Error('Pseudora could not confirm safe processing. Nothing was sent.'), { responseCode: 'failed' });
   }
-  const count = (/** @type {string} */ h) => Number.parseInt(r.headers.get(h) || '0', 10) || 0;
-  let b64 = '';
-  for (let i = 0; i < png.length; i += 0x8000) b64 += String.fromCharCode(...png.subarray(i, i + 0x8000));
+  const types = Object.keys(result.type_counts);
+  if (!types.every(type => Number.isSafeInteger(result.type_counts[type]) && result.type_counts[type] >= 0)) {
+    throw Object.assign(new Error('Pseudora returned invalid counts.'), { responseCode: 'failed' });
+  }
   return {
-    safe: true, format: out, image_base64: btoa(b64),
-    entity_count: count('x-pii-entity-count'), visual_count: count('x-pii-visual-count'), review_regions: count('x-pii-review-count'),
-    types: (r.headers.get('x-pii-types') || '').split(',').map(t => t.trim()).filter(Boolean),
+    safe: true, format: out, image_base64: result.image_base64,
+    entity_count: result.entity_count, review_regions: Number.isSafeInteger(result.review_regions) ? result.review_regions : 0,
+    types,
   };
+}
+
+/** Face styles the Cloud accepts, the default (irreversible blur) first. */
+const FACE_STYLES = ['blur', 'pixelate', 'black'];
+/** A Cloud preset id: anything else is never sent nor shown. */
+const OPTION_VALUE = /^[a-z][a-z0-9_]{0,63}$/;
+
+/**
+ * Why: the popup's "Tipo documento" list must match what /v1/images/redact accepts.
+ * What: GET /v1/images/options → { domains: [{ value, label }] } with the Italian label;
+ *       entries with a malformed value are dropped; any error rejects (popup keeps "Generico").
+ * Test: tests/image-background.mjs handleImageOptions cases.
+ */
+async function handleImageOptions() {
+  const s = await getSettings();
+  if (!s.piiApiUrl) throw Object.assign(new Error('API URL not configured.'), { responseCode: 'not_configured' });
+  const r = await fetch(`${s.piiApiUrl.replace(/\/$/, '')}/v1/images/options`, {
+    headers: { ...(await getAuthHeaders(s)), Accept: 'application/json' }, signal: globalThis.AbortSignal?.timeout(API_TIMEOUT_MS),
+  });
+  if (!r.ok) throw new Error(`Image options unavailable (HTTP ${r.status}).`);
+  const body = await r.json();
+  const domains = (Array.isArray(body?.domains) ? body.domains : [])
+    .map(d => ({ value: d?.value, label: d?.labels?.it || d?.label }))
+    .filter(d => typeof d.value === 'string' && OPTION_VALUE.test(d.value) && typeof d.label === 'string' && d.label);
+  if (body?.mode !== 'redact' || !domains.length) throw new Error('Invalid image options.');
+  return { mode: 'redact', domains };
 }
 
 // ── Protected screenshot ──────────────────────────────────────────────────────

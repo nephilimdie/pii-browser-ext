@@ -28,6 +28,17 @@
 
 <!-- Protected screenshot -->
 <div class="shot-row">
+  <label for="shot-domain">Tipo documento</label>
+  <select id="shot-domain">
+    <option value="generic_professional">Generico</option>
+  </select>
+  <label for="face-style">Volti</label>
+  <select id="face-style">
+    <option value="blur">Sfocatura</option>
+    <option value="pixelate">Pixel</option>
+    <option value="black">Nero</option>
+  </select>
+  <div class="shot-hint">Vale per screenshot e immagini incollate: vengono oscurate (la pseudonimizzazione è solo per il testo). Sfocatura e pixel sono irreversibili.</div>
   <button class="btn-primary" id="shot-btn" type="button">Screenshot protetto</button>
   <div class="shot-hint">Select an area of this tab: Pseudora redacts it, then attaches it to ChatGPT/Claude or copies it to the clipboard. <span id="shot-key"></span></div>
   <div id="shot-msg" class="msg"></div>

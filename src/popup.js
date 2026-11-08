@@ -11,6 +11,8 @@ const SYNC_DEFAULTS = {
   autoSend: false,
   interceptSend: false,
   protectImages: true,
+  imageDomain: 'generic_professional',
+  faceStyle: 'blur',
 };
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -33,6 +35,8 @@ Promise.all([
   $('auto-send').checked     = sync.autoSend;
   $('intercept-send').checked= sync.interceptSend;
   $('protect-images').checked= sync.protectImages !== false;
+  $('face-style').value = ['blur', 'pixelate', 'black'].includes(sync.faceStyle) ? sync.faceStyle : 'blur';
+  loadImageOptions(sync.imageDomain);
 
   const hasUrl = !!sync.piiApiUrl;
   if (!hasUrl) {
@@ -445,6 +449,23 @@ function setConn(state, label) {
 // ── Protected screenshot ──────────────────────────────────────────────────────
 // Opening the popup granted activeTab; the service worker captures, the tab shows
 // the selection overlay, so the popup closes as soon as the overlay is up.
+
+async function loadImageOptions(selected) {
+  const response = await sendMsg({ type: 'GET_IMAGE_OPTIONS' });
+  if (!Array.isArray(response?.domains) || response.mode !== 'redact') return;
+  const select = $('shot-domain');
+  select.replaceChildren(...response.domains.map(domain => {
+    const option = document.createElement('option');
+    option.value = domain.value;
+    option.textContent = domain.label;
+    return option;
+  }));
+  select.value = response.domains.some(domain => domain.value === selected) ? selected : response.domains[0].value;
+  if (select.value !== selected) await chrome.storage.sync.set({ imageDomain: select.value });
+}
+
+$('shot-domain').addEventListener('change', () => chrome.storage.sync.set({ imageDomain: $('shot-domain').value }));
+$('face-style').addEventListener('change', () => chrome.storage.sync.set({ faceStyle: $('face-style').value }));
 
 chrome.commands?.getAll(cmds => {
   const key = cmds.find(c => c.name === 'protected-screenshot')?.shortcut;
