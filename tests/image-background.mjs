@@ -17,6 +17,7 @@ const context = vm.createContext({
   },
 });
 vm.runInContext(await src('core.js'), context);
+vm.runInContext(await src('bg-files.js'), context);
 vm.runInContext(source, context);
 let settings = { piiApiUrl: 'https://api.test/', docType: 'fine_appeal', faceStyle: 'blur' };
 context.testSettings = () => settings;
@@ -41,7 +42,7 @@ const sent = calls[0].init.body.get('file');
 assert.equal(sent.type, 'image/png');
 assert.equal(calls[0].init.body.get('domain'), 'fine_appeal', 'document type comes from storage.sync');
 assert.equal(calls[0].init.body.get('face_style'), 'blur', 'faces blurred by default');
-assert.equal(calls[0].init.body.get('fast'), '1', 'single analysis image result');
+assert.equal(calls[0].init.body.get('fast'), null, 'the Cloud analyzes once for every client');
 assert.equal(calls[0].init.body.get('review_default'), 'cover', 'screenshot flow cannot send visible uncertain areas');
 assert.equal(calls[0].init.body.get('review_restore'), null, 'no second render');
 assert.equal(Buffer.from(await sent.arrayBuffer()).toString(), 'original-screenshot');
@@ -49,10 +50,23 @@ assert.equal(calls[0].init.headers.Authorization, 'Bearer t');
 assert.equal(calls[0].init.headers.Accept, 'application/json', 'without it the Cloud replies with image bytes');
 assert.equal(calls[0].init.headers['Content-Type'], undefined, 'fetch must set the multipart boundary');
 assert.ok(calls[0].init.signal instanceof AbortSignal);
-assert.deepEqual({ ...ok, types: [...ok.types], review_boxes: [...ok.review_boxes] }, {
+assert.deepEqual(JSON.parse(JSON.stringify(ok)), {
   safe: true, format: 'png', image_base64: Buffer.from(PNG).toString('base64'),
-  entity_count: 3, review_regions: 2, review_default: 'cover', types: ['PERSON', 'FACE'], review_boxes: [],
+  entity_count: 3, review_regions: 2, review_default: 'cover', review_areas: [], types: ['PERSON', 'FACE'], review_boxes: [],
 });
+
+// Editor flows ask for visible areas; the echo and every area must come back, else fail closed.
+const areas = [{ id: 0, reason: 'low_confidence', bbox: [0.1, 0.2, 0.3, 0.4] }, { id: 1, reason: 'weird', bbox: [0.5, 0.5, 0.6, 0.6] }];
+reply = image(PNG, { review_default: 'visible', review_areas: areas });
+const vis = JSON.parse(JSON.stringify(await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png', visible: true })`)));
+assert.equal(calls.at(-1).init.body.get('review_default'), 'visible');
+assert.equal(vis.review_default, 'visible');
+assert.deepEqual(vis.review_areas, [areas[0], { id: 1, reason: 'weird', bbox: [0.5, 0.5, 0.6, 0.6] }]);
+reply = image(PNG, { review_default: 'visible', review_areas: [areas[0]] });   // 2 regions announced, 1 listed
+assert.equal((await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png', visible: true })`).catch(e => e)).responseCode, 'failed');
+reply = image(PNG, { review_areas: areas });                                     // older Cloud: no echo → covered
+assert.equal((await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png', visible: true })`)).review_default, 'cover');
+reply = image();
 
 // Doubtful boxes: only the geometry reaches the page, never the review image.
 reply = image(PNG, { review_areas: [

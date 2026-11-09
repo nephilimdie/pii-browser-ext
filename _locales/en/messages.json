@@ -566,15 +566,6 @@
   "imgPreviewAlt": {
     "message": "Preview of the protected image"
   },
-  "imgZoomOpen": {
-    "message": "Click to enlarge and check"
-  },
-  "imgZoomTitle": {
-    "message": "Enlarged preview"
-  },
-  "imgZoomClose": {
-    "message": "Close preview"
-  },
   "imgSummary": {
     "message": "Hidden: {summary}."
   },
@@ -587,12 +578,6 @@
   "imgCountMany": {
     "message": "{n} items"
   },
-  "imgReviewOne": {
-    "message": "1 uncertain area hidden to be safe (outlined)."
-  },
-  "imgReviewMany": {
-    "message": "{n} uncertain areas hidden to be safe (outlined)."
-  },
   "imgNotSent": {
     "message": "The original image was not sent."
   },
@@ -603,7 +588,7 @@
     "message": "Unsupported image format: convert to JPEG/PNG and try again."
   },
   "img_unsupported_file": {
-    "message": "This file cannot yet be protected in the extension. Use Documents in Pseudora Cloud, or explicitly turn off protection before uploading it."
+    "message": "This type of file cannot be protected: send it on its own, or use only images, PDF, DOCX or TXT."
   },
   "img_image_unsupported": {
     "message": "Unsupported image format: convert to JPEG/PNG and try again."
@@ -856,5 +841,110 @@
   },
   "entities_CREDIT_CARD": {
     "message": "credit cards"
+  },
+  "rev_low_confidence": {
+    "message": "Uncertain area: hard-to-read text"
+  },
+  "rev_unrecognized_ink": {
+    "message": "Uncertain area: unrecognised marks or writing"
+  },
+  "rev_uncertain_mark": {
+    "message": "Possible signature or stamp"
+  },
+  "revSummary": {
+    "message": "{visible} visible · {covered} covered"
+  },
+  "revCoverAll": {
+    "message": "Cover all"
+  },
+  "revShowAll": {
+    "message": "Show all"
+  },
+  "revDraw": {
+    "message": "Draw an area to cover"
+  },
+  "revDrawStop": {
+    "message": "Stop drawing"
+  },
+  "revAdd": {
+    "message": "Add area"
+  },
+  "revNoteVisible": {
+    "message": "Uncertain areas are visible by default: check them and cover any that contain personal data before you share the file."
+  },
+  "revNoteCovered": {
+    "message": "Uncertain areas were covered to be safe (outlined)."
+  },
+  "revCovered": {
+    "message": "Covered"
+  },
+  "revVisible": {
+    "message": "Visible"
+  },
+  "revShow": {
+    "message": "Show"
+  },
+  "revCover": {
+    "message": "Cover"
+  },
+  "revUserArea": {
+    "message": "Added area {n} (arrows: move, Shift+arrows: resize, Delete: remove)"
+  },
+  "revRemove": {
+    "message": "Remove added area {n}"
+  },
+  "revUserList": {
+    "message": "Areas you added ({n})"
+  },
+  "revRemoveShort": {
+    "message": "Remove"
+  },
+  "fileProtected": {
+    "message": "Protected file: {name}"
+  },
+  "fileButton": {
+    "message": "Upload a file"
+  },
+  "protectTitle": {
+    "message": "Protect a file with Pseudora"
+  },
+  "protectLead": {
+    "message": "Images (PNG, JPEG, WebP), PDF, DOCX and TXT. Pseudora protects the file and the original is not sent to the chat."
+  },
+  "protectPick": {
+    "message": "Choose a file or drop it here"
+  },
+  "protectGrant": {
+    "message": "Allow access"
+  },
+  "protectGrantText": {
+    "message": "To read the file Pseudora needs permission to access {site}. It is only used to download this file."
+  },
+  "protectAttach": {
+    "message": "Attach to the chat"
+  },
+  "protectCopy": {
+    "message": "Copy to clipboard"
+  },
+  "protectDownload": {
+    "message": "Download"
+  },
+  "protectAgain": {
+    "message": "Another file"
+  },
+  "protectAttachFailed": {
+    "message": "Could not attach it to the chat: download it and attach it manually."
+  },
+  "protectCopied": {
+    "message": "Protected image copied to the clipboard."
+  },
+  "protectCopyFailed": {
+    "message": "The protected file could not be copied or saved."
+  },
+  "menuProtectImage": {
+    "message": "Protect image with Pseudora"
+  },
+  "menuProtectFile": {
+    "message": "Protect file with Pseudora"
   }
 }

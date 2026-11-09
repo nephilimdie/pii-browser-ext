@@ -426,6 +426,13 @@ $('shot-btn').addEventListener('click', async () => {
   showMsg('shot-msg', resp?.error || t('errNotCapturable'), 'err');
 });
 
+// "Carica file": a page (a file picker would close the popup) that knows which tab to attach to.
+$('file-btn').addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  await sendMsg({ type: 'OPEN_PROTECT', tabId: Number.isSafeInteger(tab?.id) ? tab.id : null });
+  window.close();
+});
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function showMsg(id, text, type) {

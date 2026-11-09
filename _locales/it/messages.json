@@ -566,15 +566,6 @@
   "imgPreviewAlt": {
     "message": "Anteprima dell'immagine protetta"
   },
-  "imgZoomOpen": {
-    "message": "Clic per ingrandire e controllare"
-  },
-  "imgZoomTitle": {
-    "message": "Anteprima ingrandita"
-  },
-  "imgZoomClose": {
-    "message": "Chiudi anteprima"
-  },
   "imgSummary": {
     "message": "Oscurati: {summary}."
   },
@@ -587,12 +578,6 @@
   "imgCountMany": {
     "message": "{n} elementi"
   },
-  "imgReviewOne": {
-    "message": "1 area incerta oscurata per sicurezza (contornata)."
-  },
-  "imgReviewMany": {
-    "message": "{n} aree incerte oscurate per sicurezza (contornate)."
-  },
   "imgNotSent": {
     "message": "L'immagine originale non è stata inviata."
   },
@@ -603,7 +588,7 @@
     "message": "Formato immagine non supportato: converti in JPEG/PNG e riprova."
   },
   "img_unsupported_file": {
-    "message": "Questo file non può ancora essere protetto nell'estensione. Usa Documenti su Pseudora Cloud oppure disattiva esplicitamente la protezione prima di caricarlo."
+    "message": "Questo tipo di file non può essere protetto: invialo da solo oppure usa solo immagini, PDF, DOCX o TXT."
   },
   "img_image_unsupported": {
     "message": "Formato immagine non supportato: converti in JPEG/PNG e riprova."
@@ -856,5 +841,110 @@
   },
   "entities_CREDIT_CARD": {
     "message": "carte di credito"
+  },
+  "rev_low_confidence": {
+    "message": "Area incerta: testo poco leggibile"
+  },
+  "rev_unrecognized_ink": {
+    "message": "Area incerta: segni o scritte non riconosciuti"
+  },
+  "rev_uncertain_mark": {
+    "message": "Possibile firma o timbro"
+  },
+  "revSummary": {
+    "message": "{visible} visibili · {covered} coperte"
+  },
+  "revCoverAll": {
+    "message": "Copri tutte"
+  },
+  "revShowAll": {
+    "message": "Mostra tutte"
+  },
+  "revDraw": {
+    "message": "Disegna un'area da coprire"
+  },
+  "revDrawStop": {
+    "message": "Fine disegno"
+  },
+  "revAdd": {
+    "message": "Aggiungi area"
+  },
+  "revNoteVisible": {
+    "message": "Le aree incerte sono visibili per impostazione predefinita: controllale e copri quelle con dati personali prima di condividere il file."
+  },
+  "revNoteCovered": {
+    "message": "Le aree incerte sono state coperte per sicurezza (contornate)."
+  },
+  "revCovered": {
+    "message": "Coperta"
+  },
+  "revVisible": {
+    "message": "Visibile"
+  },
+  "revShow": {
+    "message": "Mostra"
+  },
+  "revCover": {
+    "message": "Copri"
+  },
+  "revUserArea": {
+    "message": "Area aggiunta {n} (frecce: sposta, Maiusc+frecce: ridimensiona, Canc: rimuovi)"
+  },
+  "revRemove": {
+    "message": "Rimuovi l'area aggiunta {n}"
+  },
+  "revUserList": {
+    "message": "Aree aggiunte da te ({n})"
+  },
+  "revRemoveShort": {
+    "message": "Rimuovi"
+  },
+  "fileProtected": {
+    "message": "File protetto: {name}"
+  },
+  "fileButton": {
+    "message": "Carica file"
+  },
+  "protectTitle": {
+    "message": "Proteggi un file con Pseudora"
+  },
+  "protectLead": {
+    "message": "Immagini (PNG, JPEG, WebP), PDF, DOCX e TXT. Pseudora protegge il file e l'originale non viene inviato alla chat."
+  },
+  "protectPick": {
+    "message": "Scegli un file o trascinalo qui"
+  },
+  "protectGrant": {
+    "message": "Consenti l'accesso"
+  },
+  "protectGrantText": {
+    "message": "Per leggere il file serve il permesso di accedere a {site}. Pseudora lo usa solo per scaricare questo file."
+  },
+  "protectAttach": {
+    "message": "Allega alla chat"
+  },
+  "protectCopy": {
+    "message": "Copia negli appunti"
+  },
+  "protectDownload": {
+    "message": "Scarica"
+  },
+  "protectAgain": {
+    "message": "Un altro file"
+  },
+  "protectAttachFailed": {
+    "message": "Non sono riuscito ad allegarlo alla chat: scaricalo e allegalo a mano."
+  },
+  "protectCopied": {
+    "message": "Immagine protetta copiata negli appunti."
+  },
+  "protectCopyFailed": {
+    "message": "Non è stato possibile copiare o salvare il file protetto."
+  },
+  "menuProtectImage": {
+    "message": "Proteggi immagine con Pseudora"
+  },
+  "menuProtectFile": {
+    "message": "Proteggi file con Pseudora"
   }
 }

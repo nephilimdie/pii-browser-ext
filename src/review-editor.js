@@ -110,6 +110,7 @@
    * @param {Blob} blob server image   @param {string} format png|jpeg|webp
    */
   async function burn(blob, format, state) {
+    if (!state.user.length && !state.areas.some(a => a.covered)) return blob;   // nothing to add: server bytes as is
     const bitmap = await createImageBitmap(blob);
     try {
       const list = rects(state, bitmap.width, bitmap.height);

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title data-i18n="protectTitle">Proteggi un file con Pseudora</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="content.css">
+<link rel="stylesheet" href="protect.css">
+</head>
+<body class="pii-ui protect">
+<main class="protect-main">
+  <h1 data-i18n="protectTitle">Proteggi un file con Pseudora</h1>
+  <p class="protect-lead" data-i18n="protectLead">Immagini (PNG, JPEG, WebP), PDF, DOCX e TXT. Il file viene protetto da Pseudora e l'originale non viene inviato alla chat.</p>
+
+  <section id="pick">
+    <label class="protect-drop" id="drop">
+      <input type="file" id="file" accept=".png,.jpg,.jpeg,.webp,.pdf,.docx,.txt,image/png,image/jpeg,image/webp,application/pdf,text/plain">
+      <span data-i18n="protectPick">Scegli un file o trascinalo qui</span>
+    </label>
+  </section>
+
+  <section id="grant" hidden>
+    <p id="grant-text"></p>
+    <button class="pii-btn" id="grant-btn" type="button" data-i18n="protectGrant">Consenti l'accesso</button>
+  </section>
+
+  <p class="pii-img-status" id="status" role="status" hidden><span class="pii-spinner is-dark"></span><span data-i18n="imgWorking">Protezione in corso…</span></p>
+  <div class="pii-notice is-error" id="error" role="alert" hidden><p class="pii-notice-title" data-i18n="imgErrorTitle"></p><p class="pii-notice-detail" id="error-text"></p></div>
+
+  <section id="result" hidden>
+    <div id="editor"></div>
+    <p class="pii-img-summary" id="summary"></p>
+    <div class="pii-actions protect-actions">
+      <button class="pii-btn" id="attach" type="button" data-i18n="protectAttach" hidden>Allega alla chat</button>
+      <button class="pii-btn" id="copy" type="button" data-i18n="protectCopy" hidden>Copia negli appunti</button>
+      <button class="pii-btn pii-btn-secondary" id="download" type="button" data-i18n="protectDownload">Scarica</button>
+      <button class="pii-btn pii-btn-secondary" id="again" type="button" data-i18n="protectAgain">Un altro file</button>
+    </div>
+    <p class="pii-hint" id="done" role="status" hidden></p>
+  </section>
+</main>
+<script src="core.js"></script>
+<script src="review-editor.js"></script>
+<script src="protect.js"></script>
+</body>
+</html>

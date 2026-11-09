@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.4.0] - 2026-11-09
+
+### Added
+- **Aree incerte sotto il tuo controllo** (images pasted, dropped or picked in ChatGPT/Claude, and "Carica file"): uncertain areas (hard-to-read text, unrecognised marks, a possible signature or stamp) are no longer blacked out by default. Each one is outlined with its reason; **Copri / Mostra** per area (click the outline), **Copri tutte / Mostra tutte**, a "N visibili · M coperte" summary and a note asking to check them before sharing. **Disegna un'area da coprire** (drag) and **Aggiungi area** (keyboard: arrows move, Shift+arrows resize, Canc removes). Covered and drawn areas are burned into the pixels as opaque black boxes before the file reaches the chat. Confirmed personal data is always hidden by the Cloud and cannot be uncovered. An older Cloud that does not echo `review_default` keeps every area covered.
+- **Carica file** in the popup: images (PNG, JPEG, WebP), PDF, DOCX and TXT are protected by the Cloud (`/v1/documents/redact` for documents), then attached to the ChatGPT/Claude tab you came from or downloaded.
+- Context menus **Proteggi immagine con Pseudora** (any image on any page) and **Proteggi file con Pseudora** (links to PDF, DOCX, TXT): on ChatGPT/Claude the protected file is attached to the chat, elsewhere the image is copied to the clipboard (or downloaded). If the site does not allow reading the file, the page asks for access to that one site (optional permission, never pre-granted).
+- PDF, DOCX and TXT pasted or dropped in the ChatGPT/Claude composer are protected like images.
+
+### Changed
+- Images are analysed once by the Cloud (about 3x faster on a full Retina screenshot); the `fast` field is no longer sent.
+- A file Pseudora cannot protect is refused only when it is mixed with protected files; on its own it reaches the site as before.
+- New permission: `contextMenus` (no new host permission).
+
+### Removed
+- Image zoom view and the old dashed outlines (replaced by the editor).
+
 ## [1.3.0] - 2026-11-09
 
 ### Added
