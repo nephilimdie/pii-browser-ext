@@ -203,13 +203,13 @@ const plain = o => (o ? { ...o } : o);
   reset(logged);
   assert.equal((await start()).ok, true);
   assert.deepEqual(calls.map(c => c[0]), ['probe', 'inject', 'capture', 'send']);
-  assert.deepEqual([...calls[1][1]], ['src/composer.js', 'src/image-guard.js', 'src/screenshot.js']);
+  assert.deepEqual([...calls[1][1]], ['src/core.js', 'src/composer.js', 'src/image-guard.js', 'src/screenshot.js']);
   assert.deepEqual(calls[2], ['capture', 3, 'png']);
   assert.equal(calls[3][2].type, 'SCREENSHOT_START');
   assert.equal(calls[3][2].dataUrl, 'data:image/png;base64,AAAA');
 
   // ChatGPT/Claude with the manifest content scripts: nothing re-injected (no duplicate paste guard).
-  reset(logged, ['PseudoraComposer', 'PseudoraImageGuard', 'PseudoraScreenshot']);
+  reset(logged, ['PseudoraCore', 'PseudoraComposer', 'PseudoraImageGuard', 'PseudoraScreenshot']);
   await start();
   assert.deepEqual(calls.map(c => c[0]), ['probe', 'capture', 'send']);
 

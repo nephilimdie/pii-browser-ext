@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
 // Background REDACT_IMAGE: only a 200 safe JSON reply with intact image bytes is
 // handed back; every other reply rejects (fail closed).
-const source = await readFile(new URL('../src/background.js', import.meta.url), 'utf8');
+import { src } from './helpers/env.mjs';
+const source = await src('background.js');
 let reply;
 let calls = [];
 const context = vm.createContext({
@@ -16,8 +16,9 @@ const context = vm.createContext({
     storage: { sync: { get: async d => d }, local: { get: async d => d, set: async () => {} } },
   },
 });
+vm.runInContext(await src('core.js'), context);
 vm.runInContext(source, context);
-let settings = { piiApiUrl: 'https://api.test/', imageDomain: 'fine_appeal', faceStyle: 'blur' };
+let settings = { piiApiUrl: 'https://api.test/', docType: 'fine_appeal', faceStyle: 'blur' };
 context.testSettings = () => settings;
 vm.runInContext(`getSettings = async () => testSettings();
   getAuthHeaders = async () => ({ Authorization: 'Bearer t', 'X-Pii-Client': 'browser_extension' });`, context);
@@ -40,22 +41,40 @@ const sent = calls[0].init.body.get('file');
 assert.equal(sent.type, 'image/png');
 assert.equal(calls[0].init.body.get('domain'), 'fine_appeal', 'document type comes from storage.sync');
 assert.equal(calls[0].init.body.get('face_style'), 'blur', 'faces blurred by default');
+assert.equal(calls[0].init.body.get('review_restore'), '1', 'asks for the doubtful boxes');
 assert.equal(Buffer.from(await sent.arrayBuffer()).toString(), 'original-screenshot');
 assert.equal(calls[0].init.headers.Authorization, 'Bearer t');
 assert.equal(calls[0].init.headers.Accept, 'application/json', 'without it the Cloud replies with image bytes');
 assert.equal(calls[0].init.headers['Content-Type'], undefined, 'fetch must set the multipart boundary');
 assert.ok(calls[0].init.signal instanceof AbortSignal);
-assert.deepEqual({ ...ok, types: [...ok.types] }, {
+assert.deepEqual({ ...ok, types: [...ok.types], review_boxes: [...ok.review_boxes] }, {
   safe: true, format: 'png', image_base64: Buffer.from(PNG).toString('base64'),
-  entity_count: 3, review_regions: 2, types: ['PERSON', 'FACE'],
+  entity_count: 3, review_regions: 2, types: ['PERSON', 'FACE'], review_boxes: [],
 });
 
-// A tampered stored setting is never forwarded: no domain, faces fall back to blur.
-settings = { ...settings, imageDomain: 'x"; DROP', faceStyle: 'none' };
+// Doubtful boxes: only the geometry reaches the page, never the review image.
+reply = image(PNG, { review: { content_type: 'image/png', image_base64: 'UkVWSUVX', regions: [
+  { id: 0, reason: 'low_confidence', bbox: [0.1, 0.2, 0.3, 0.4] },
+  { id: 1, reason: 'low_confidence', bbox: [0.5, 0.5, 0.4, 0.6] },          // inverted
+  { id: 2, reason: 'low_confidence', bbox: [0, 0, 2, 1] },                  // out of range
+  { id: 3, reason: 'low_confidence', bbox: 'x' },
+] } });
+const reviewed = await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png' })`);
+assert.deepEqual(JSON.parse(JSON.stringify(reviewed.review_boxes)), [[0.1, 0.2, 0.3, 0.4]]);
+assert.equal(JSON.stringify(reviewed).includes('UkVWSUVX'), false, 'review layer dropped');
+reply = image();
+
+// A team policy is text-only: images fall back to the generic preset.
+settings = { ...settings, docType: 'domain:legal_it' };
 await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png' })`);
-assert.equal(calls.at(-1).init.body.get('domain'), null);
+assert.equal(calls.at(-1).init.body.get('domain'), 'generic_professional');
+
+// A tampered stored setting is never forwarded: generic preset, faces fall back to blur.
+settings = { ...settings, docType: 'x"; DROP', faceStyle: 'none' };
+await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png' })`);
+assert.equal(calls.at(-1).init.body.get('domain'), 'generic_professional');
 assert.equal(calls.at(-1).init.body.get('face_style'), 'blur');
-settings = { ...settings, imageDomain: 'generic_professional', faceStyle: 'black' };
+settings = { ...settings, docType: 'generic_professional', faceStyle: 'black' };
 await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png' })`);
 assert.equal(calls.at(-1).init.body.get('face_style'), 'black', 'an explicit choice is sent as is');
 
@@ -118,4 +137,17 @@ assert.equal(calls.length, 0, 'unsupported images never reach the network');
 vm.runInContext(`getAuthHeaders = async () => { throw new Error('nope'); };`, context);
 assert.equal((await run(`handleRedactImage({ data: 'AAAA', format: 'png' })`).catch(e => e)).responseCode, 'not_configured');
 assert.equal(calls.length, 0);
+
+// Document types: presets + team policies; a failing list degrades to empty, never rejects.
+vm.runInContext(`getAuthHeaders = async () => ({ Authorization: 'Bearer t' });`, context);
+reply = () => { const url = calls.at(-1).url;
+  return url.endsWith('/v1/images/options')
+    ? new Response(JSON.stringify({ mode: 'redact', domains: [{ value: 'hr_payroll', labels: { it: 'Busta paga', en: 'Payslip' } }] }), { headers: { 'Content-Type': 'application/json' } })
+    : new Response(JSON.stringify([{ domain: 'legal_it', display_name: 'Studio legale' }, { nope: 1 }]), { headers: { 'Content-Type': 'application/json' } }); };
+const docs = JSON.parse(JSON.stringify(await run('handleDocTypes()')));
+assert.deepEqual(docs, { presets: [{ value: 'hr_payroll', label: 'Busta paga' }], policies: [{ domain: 'legal_it', display_name: 'Studio legale' }] });
+reply = () => new Response('{}', { status: 500 });
+assert.deepEqual(JSON.parse(JSON.stringify(await run('handleDocTypes()'))), { presets: [], policies: [] });
+settings = { piiApiUrl: '' };
+assert.deepEqual(JSON.parse(JSON.stringify(await run('handleDocTypes()'))), { presets: [], policies: [] });
 console.log('image-background: ok');
