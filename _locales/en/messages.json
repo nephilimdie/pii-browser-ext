@@ -231,7 +231,7 @@
     "message": "Detected automatically. Change it only for a custom instance."
   },
   "saveConnection": {
-    "message": "Save connection"
+    "message": "Save"
   },
   "testConnection": {
     "message": "Test"
@@ -454,9 +454,6 @@
   },
   "feedbackFailed": {
     "message": "Could not send the feedback."
-  },
-  "fieldDocTypeShort": {
-    "message": "Document type"
   },
   "errTitle_policy_blocked": {
     "message": "Blocked by your team's policy"

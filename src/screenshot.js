@@ -156,7 +156,7 @@
 
   function clear(selector) { root?.querySelectorAll(selector).forEach(n => n.remove()); }
 
-  function toast(text, { error = false, actions = [], ttl = 0 } = {}) {
+  function toast(text, { error = false, actions = [], ttl = 0, closable = true } = {}) {
     clear('.toast');
     const box = el('div', `toast${error ? ' error' : ''}`);
     box.setAttribute('role', error ? 'alert' : 'status');
@@ -168,7 +168,7 @@
       b.addEventListener('click', fn);
       row.appendChild(b);
     });
-    row.appendChild(Object.assign(el('button', '', TEXT.close), { type: 'button', onclick: () => box.remove() }));
+    if (closable) row.appendChild(Object.assign(el('button', '', TEXT.close), { type: 'button', onclick: () => box.remove() }));
     box.appendChild(row);
     ensureRoot().appendChild(box);
     if (ttl) setTimeout(() => box.remove(), ttl);
@@ -275,7 +275,7 @@
       if (!rect) return;
       const crop = await cropToPng(bitmap, rect);
       bitmap.close(); bitmap = null;                 // the full capture is gone from here on
-      toast(TEXT.working, { actions: [[TEXT.cancel, () => { cancelled.value = true; clear('.toast'); }]] });
+      toast(TEXT.working, { actions: [[TEXT.cancel, () => { cancelled.value = true; clear('.toast'); }]], closable: false });
       const result = await protectShot(crop, {
         send: G.safeSend,
         route: route({ site, hasComposer: !!site?.input(document) }),

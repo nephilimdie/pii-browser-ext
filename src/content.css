@@ -6,8 +6,8 @@
 .pii-ui { font-family: var(--pii-font); color: var(--pii-ink); -webkit-font-smoothing: antialiased; text-align: left; }
 .pii-ui :focus-visible { outline: 2px solid var(--pii-indigo); outline-offset: 2px; }
 .pii-ui ::selection { background: var(--pii-wash); color: var(--pii-ink); }
-.pii-ui [hidden] { display: none !important; }
-.pii-ui p, .pii-ui h2, .pii-ui figure, .pii-ui table { margin: 0; }
+:where(.pii-ui) [hidden] { display: none !important; }
+:where(.pii-ui) :where(p, h2, figure, table) { margin: 0; }   /* zero specificity: components set their own */
 
 /* ── Page button: a status indicator, not a launcher acronym ───────────────── */
 .pii-toolbar { display: inline-flex; pointer-events: auto; user-select: none; }
@@ -142,6 +142,7 @@
 .pii-cell-type { color: var(--pii-slate); white-space: nowrap; }
 .pii-cell-muted { color: var(--pii-muted); font-style: italic; }
 .pii-chip { display: inline-block; max-width: 100%; padding: 1px 6px; border-radius: 5px; font: 600 12.5px/1.5 var(--pii-mono); overflow-wrap: anywhere; }
+.pii-chip.is-tag, .pii-chip.is-surrogate { white-space: nowrap; overflow-wrap: normal; }
 .pii-chip.is-tag { background: var(--pii-tag-bg); color: var(--pii-tag-text); }
 .pii-chip.is-surrogate { background: var(--pii-wash); color: var(--pii-indigo); }
 .pii-chip.is-original { background: var(--pii-original-bg); color: var(--pii-original-text); }

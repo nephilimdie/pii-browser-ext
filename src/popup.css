@@ -15,12 +15,11 @@ a { color: var(--pii-indigo); text-underline-offset: 2px; }
 ::-webkit-scrollbar { width: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--pii-line-strong); border-radius: 10px; border: 3px solid var(--pii-paper); }
 
-/* ── Header (the site's frosted header, compact) ──────────────────────────── */
+/* ── Header (the site's header, compact) ──────────────────────────── */
 .header {
-  position: sticky; top: 0; z-index: 2;
   display: flex; align-items: center; gap: 10px;
   padding: 12px 14px; border-bottom: 1px solid var(--pii-line);
-  background: color-mix(in srgb, var(--pii-paper) 88%, transparent); backdrop-filter: blur(12px);
+  background: var(--pii-paper);
 }
 .brand-icon {
   width: 32px; height: 32px; flex: none; border-radius: 10px; display: grid; place-items: center;

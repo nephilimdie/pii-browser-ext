@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.3.0] - 2026-11-09
+
+### Added
+- Italian-first interface through `chrome.i18n` (`_locales/it` is the default, `_locales/en` for English browsers): popup, page panel, image panel, screenshot overlay, OAuth page and the store name/description; entity types read "Persona", "Codice fiscale", "IBAN"…
+- Keyboard shortcuts: Alt+Shift+A anonymizes the message (or opens the panel), Alt+Shift+R restores the original, next to Alt+Shift+S for the protected screenshot; all listed in the popup's Guida tab and in the panel
+- The page button is now a status indicator ("Protetto · Studio Ferri", "Pseudora · invio libero", "Pseudora · accedi") with a full accessible name
+- Image previews are full width, open a zoomed view on click and outline the doubtful areas (only their boxes come from the Cloud; the unpainted review layer never leaves the service worker)
+- Screenshot overlay: Enter or the "Tutta l'area visibile" button captures the whole visible area without a mouse
+- Errors explain themselves: a team policy block is an amber notice naming the blocked data, an outage offers "Riprova", an expired login "Accedi di nuovo"; all in a `role="alert"` region, all saying that nothing was sent
+
+### Changed
+- Every popup setting saves as soon as you change it ("Salvato" appears next to it); Save/Verifica remain only for the connection
+- One "Tipo documento" for text and images (engine presets plus your team's policies) instead of three disagreeing pickers; shown in the panel header and in the button's accessible name
+- One Pseudora panel for text and images: same header, buttons, position and dark theme (the theme follows the site), anchored above the page button so it never covers it, also in a 420px window
+- The popup opens on protection status; first run shows one "Accedi con Pseudora" button with pseudora.cloud prefilled; server address, API key, OAuth client ID and reset sit under "Avanzate"
+- Visual language aligned with pseudora.cloud (tokens, Inter/IBM Plex Mono stacks, original/tag/surrogate chips); no label below 12px, secondary text at 4.5:1 or more
+- "Ripristina originale" is a caution action that says it puts personal data back; the feedback question comes after the actions
+- Branded OAuth page with "Riprova" instead of emoji and raw error codes
+
+### Removed
+- "Auto-send after anonymization": it was saved but never read
+- Dead popup code (`refreshFeedbackUI`, `#feedback-row`, `<v-icon>`), inline styles, debug logging
+
+### Fixed
+- A saved team policy (for example "Studio legale") was reset to "Generic" in the popup and in the page panel because the list was rebuilt from the not-yet-populated select (race); restore now reads the mappings of the document type actually used
+- Preferences changed in the popup were lost unless Save was pressed in another tab
+- After a screenshot two notifications appeared at once; now only the screenshot message does
+- The image panel covered the page button
+
+### Security
+- Fail-closed paths unchanged (send guard, composer write check, image validation); no new permissions and no remote code. Settings from 1.2.x are migrated (`contextType`/`imageDomain` → `docType`, `autoSend` removed)
+
+### Italiano
+- Interfaccia tutta in italiano (inglese per i browser in inglese), etichette dei dati in italiano
+- Le impostazioni del popup si salvano subito ("Salvato"); "Auto-send" rimosso perché non faceva nulla
+- Un solo "Tipo documento" per testo e immagini; corretto il ritorno a "Generico" della policy di team
+- Il pulsante nella pagina mostra lo stato ("Protetto · Studio Ferri"); un unico pannello per testo e immagini, che non copre più il pulsante e segue il tema scuro del sito
+- Errori distinti: blocco della policy (con il dato bloccato), servizio non raggiungibile con "Riprova", accesso scaduto con "Accedi di nuovo"; sempre "Nulla è stato inviato"
+- Scorciatoie Alt+Shift+A (anonimizza), Alt+Shift+R (ripristina), Alt+Shift+S (screenshot); anteprima immagini ingrandibile con le aree incerte contornate; screenshot dell'intera area visibile con Invio
+- Configurazione self-hosted sotto "Avanzate"; reimpostazione con conferma; pagina di accesso con "Riprova"
+- Nessun nuovo permesso
+
 ## [1.2.1] - 2026-11-08
 
 ### Added

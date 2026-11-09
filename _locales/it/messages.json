@@ -231,7 +231,7 @@
     "message": "Rilevato in automatico dal server. Modificalo solo per un'istanza personalizzata."
   },
   "saveConnection": {
-    "message": "Salva connessione"
+    "message": "Salva"
   },
   "testConnection": {
     "message": "Verifica"
@@ -454,9 +454,6 @@
   },
   "feedbackFailed": {
     "message": "Non è stato possibile inviare il riscontro."
-  },
-  "fieldDocTypeShort": {
-    "message": "Tipo documento"
   },
   "errTitle_policy_blocked": {
     "message": "Bloccato dalla policy del team"
