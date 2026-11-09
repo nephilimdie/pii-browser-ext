@@ -34,6 +34,7 @@ const errorJson = (status, error) => () => new Response(JSON.stringify({ error, 
 
 // Success: multipart upload of the image, bearer headers, 150 s timeout signal, decoded counts.
 reply = image();
+
 const ok = await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png' })`);
 assert.equal(calls[0].url, 'https://api.test/v1/images/redact');
 assert.ok(calls[0].init.body instanceof FormData, 'multipart body');
@@ -53,6 +54,22 @@ assert.deepEqual({ ...ok, types: [...ok.types], review_boxes: [...ok.review_boxe
   safe: true, format: 'png', image_base64: Buffer.from(PNG).toString('base64'),
   entity_count: 3, review_regions: 2, review_default: 'cover', types: ['PERSON', 'FACE'], review_boxes: [],
 });
+
+// An extension-owned review surface may receive the second image, but only when
+// every region and its geometry match the protected response.
+const area = { id: 4, reason: 'low_confidence', bbox: [0.1, 0.2, 0.3, 0.4] };
+reply = image(PNG, { review_regions: 1, review_areas: [area], review: {
+  content_type: 'image/png', image_base64: Buffer.from(PNG).toString('base64'), regions: [area],
+} });
+const reviewResult = await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png', review: true })`);
+assert.equal(calls.at(-1).init.body.get('review_restore'), '1');
+assert.equal(reviewResult.review_image_base64, Buffer.from(PNG).toString('base64'));
+assert.deepEqual(JSON.parse(JSON.stringify(reviewResult.review_regions_detail)), [{ id: 4, bbox: [0.1, 0.2, 0.3, 0.4] }]);
+reply = image(PNG, { review_regions: 1, review_areas: [area], review: {
+  content_type: 'image/png', image_base64: Buffer.from(PNG).toString('base64'), regions: [{ ...area, id: 5 }],
+} });
+assert.equal((await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png', review: true })`).catch(e => e)).responseCode, 'failed');
+reply = image();
 
 // Doubtful boxes: only the geometry reaches the page, never the review image.
 reply = image(PNG, { review_areas: [

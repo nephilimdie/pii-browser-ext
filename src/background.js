@@ -136,6 +136,18 @@ async function migrateDocType() {
 const migrations = () => Promise.all([migrateApiKeyOutOfSync(), migrateDocType()]).catch(() => {});
 migrations();
 chrome.runtime.onInstalled.addListener(() => { migrations(); });
+chrome.runtime.onInstalled.addListener(() => {
+  chrome.contextMenus?.create({ id: 'pseudora-protect-image', title: 'Proteggi immagine con Pseudora', contexts: ['image'] });
+});
+chrome.contextMenus?.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId !== 'pseudora-protect-image') return;
+  const url = typeof info.srcUrl === 'string' && /^https?:\/\//i.test(info.srcUrl) ? info.srcUrl : '';
+  const id = crypto.randomUUID();
+  await chrome.storage.session.set({ [`contextImage:${id}`]: url });
+  const params = new URLSearchParams({ image: id });
+  if (Number.isSafeInteger(tab?.id)) params.set('tab', String(tab.id));
+  await chrome.tabs.create({ url: chrome.runtime.getURL(`src/review.html?${params}`) });
+});
 
 // ── OAuth client discovery ────────────────────────────────────────────────────
 
@@ -541,9 +553,9 @@ function postJson(baseUrl, path, headers, body) {
  *       safe: true, a supported format, intact image bytes and sane counts; any HTTP error,
  *       timeout or malformed reply rejects with a `responseCode` (fail closed).
  * Test: tests/image-background.mjs (multipart fields, Accept, fail-closed shapes).
- * @param {{ data: string, format: string }} msg
+ * @param {{ data: string, format: string, review?: boolean }} msg
  */
-async function handleRedactImage({ data, format }) {
+async function handleRedactImage({ data, format, review = false }) {
   const s = await getSettings();
   if (!s.piiApiUrl) throw Object.assign(new Error('API URL not configured.'), { responseCode: 'not_configured' });
   if (typeof data !== 'string' || !data || !IMAGE_FORMATS.includes(format)) {
@@ -563,6 +575,7 @@ async function handleRedactImage({ data, format }) {
   // Legacy servers ignore `fast` and still paint uncertain regions by default.
   form.append('fast', '1');
   form.append('review_default', 'cover');
+  if (review === true) form.append('review_restore', '1');
 
   // The Cloud negotiates on Accept: without it the reply is raw image bytes, which this JSON parser refuses.
   const r = await post(s.piiApiUrl, '/v1/images/redact', { headers: { ...headers, Accept: 'application/json' }, body: form }, IMAGE_TIMEOUT_MS);
@@ -598,12 +611,37 @@ async function handleRedactImage({ data, format }) {
   if (result.review_default === 'visible') {
     throw Object.assign(new Error('Pseudora returned unreviewed areas.'), { responseCode: 'failed' });
   }
+  let reviewImage = null;
+  let reviewRegions = [];
+  if (review === true && boxes.length) {
+    const layer = result.review;
+    const layerBytes = decodeImage(layer?.image_base64);
+    const regions = Array.isArray(layer?.regions) ? layer.regions : [];
+    if (layer?.content_type !== `image/${out}` || !hasSignature(layerBytes, out)
+        || regions.length !== boxes.length || regions.length > 200
+        || !regions.every((region, i) => Number.isSafeInteger(region?.id) && region.id >= 0
+          && region.id === result.review_areas?.[i]?.id
+          && JSON.stringify(region.bbox) === JSON.stringify(boxes[i]))) {
+      throw Object.assign(new Error('Pseudora could not verify the review image.'), { responseCode: 'failed' });
+    }
+    reviewImage = layer.image_base64;
+    reviewRegions = regions.map(region => ({ id: region.id, bbox: [...region.bbox] }));
+  }
+  if (review === true && Number.isSafeInteger(reviewCount) && reviewCount > 0 && reviewRegions.length !== reviewCount) {
+    throw Object.assign(new Error('Pseudora did not return every review area.'), { responseCode: 'failed' });
+  }
   return {
     safe: true, format: out, image_base64: result.image_base64,
     entity_count: result.entity_count, review_regions: Number.isSafeInteger(reviewCount) ? reviewCount : 0,
     review_default: result.review_default === 'visible' ? 'visible' : 'cover',
     types, review_boxes: boxes,
+    ...(review === true ? { review_image_base64: reviewImage, review_regions_detail: reviewRegions } : {}),
   };
+}
+
+function decodeImage(value) {
+  if (typeof value !== 'string' || value.length % 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return new Uint8Array();
+  try { return Uint8Array.from(atob(value), c => c.charCodeAt(0)); } catch { return new Uint8Array(); }
 }
 
 /**

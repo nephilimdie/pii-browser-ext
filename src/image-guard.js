@@ -307,6 +307,24 @@
     });
   }
 
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (sender.id !== chrome.runtime.id || message?.type !== 'PSEUDORA_ATTACH_PROTECTED_IMAGE') return false;
+    const encoded = message.data;
+    if (typeof encoded !== 'string' || encoded.length > 14_000_000 || encoded.length % 4
+        || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) { sendResponse({ ok: false }); return false; }
+    try {
+      const bytes = base64ToBytes(encoded);
+      if (bytes.length > MAX_BYTES || bytes.length < 20 || bytes[0] !== 0x89 || bytes[1] !== 0x50
+          || bytes[2] !== 0x4e || bytes[3] !== 0x47
+          || ![0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82].every((n, i) => bytes[bytes.length - 8 + i] === n)) {
+        sendResponse({ ok: false }); return false;
+      }
+      deliver([new File([bytes], 'immagine-protetta.png', { type: 'image/png' })], { origin: 'input', target: null })
+        .then(ok => sendResponse({ ok })).catch(() => sendResponse({ ok: false }));
+      return true;
+    } catch { sendResponse({ ok: false }); return false; }
+  });
+
   function download(file) {
     const url = URL.createObjectURL(file);
     const a = document.createElement('a');

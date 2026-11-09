@@ -425,6 +425,11 @@ $('shot-btn').addEventListener('click', async () => {
   $('shot-btn').disabled = false;
   showMsg('shot-msg', resp?.error || t('errNotCapturable'), 'err');
 });
+$('file-btn').addEventListener('click', async () => {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const target = Number.isSafeInteger(tab?.id) ? `?tab=${tab.id}` : '';
+  await chrome.tabs.create({ url: chrome.runtime.getURL(`src/review.html${target}`) });
+});
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
