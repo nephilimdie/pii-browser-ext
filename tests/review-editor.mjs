@@ -77,19 +77,20 @@ const added = d.querySelector('.pii-rev-box.is-user');
 assert.equal(d.activeElement, added, 'the new area has focus');
 added.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
 assert.ok(Math.abs(s.user[0][1] - 0.43) < 1e-9);
-assert.match(d.querySelector('.pii-rev-list-title').textContent, /Aree aggiunte da te \(1\)/);
+assert.match([...d.querySelectorAll('.pii-rev-list-title')].at(-1).textContent, /Aree aggiunte da te \(1\)/);
 d.querySelector('.pii-rev-box.is-user').dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
 assert.equal(s.user.length, 0);
-assert.equal(d.querySelector('.pii-rev-list').hidden, true);
+assert.equal([...d.querySelectorAll('.pii-rev-list')].at(-1).hidden, true);
 
 // burn(): nothing covered → server bytes untouched; covered → opaque black rects, same format.
 const server = new window.Blob(['server-png'], { type: 'image/png' });
 assert.equal(await R.burn(server, 'png', R.createState(reply('visible'))), server);
 const painted = [];
+const draws = [];
 window.createImageBitmap = async () => ({ width: 1000, height: 500, close() {} });
 window.OffscreenCanvas = class {
   constructor(w, h) { this.w = w; this.h = h; }
-  getContext() { return { drawImage() {}, set fillStyle(v) { this.fs = v; }, get fillStyle() { return this.fs; }, set globalAlpha(v) { this.ga = v; },
+  getContext() { return { drawImage(...args) { draws.push(args); }, set fillStyle(v) { this.fs = v; }, get fillStyle() { return this.fs; }, set globalAlpha(v) { this.ga = v; },
     fillRect: function (...r) { painted.push([this.fs, this.ga, ...r]); } }; }
   async convertToBlob({ type }) { return new window.Blob(['burned'], { type }); }
 };
@@ -99,6 +100,17 @@ R.addUser(cov, [0.9, 0.9, 1, 1]);
 const out = await R.burn(server, 'png', cov);
 assert.equal(out.type, 'image/png');
 assert.deepEqual(painted, [['#000', 1, 97, 47, 106, 56], ['#000', 1, 897, 447, 103, 53]]);
+const confirmed = R.createState({ review_default: 'visible', review_areas: [],
+  protected_areas: [
+    { id: 'text:0:0', type: 'PERSON', bbox: [0.1, 0.1, 0.3, 0.2] },
+    { id: 'text:1:0', type: 'FISCAL_CODE', bbox: [0.2, 0.1, 0.4, 0.2] },
+  ], confirmed_review: { image_base64: 'x' } });
+confirmed.shown.push('text:0:0');
+await assert.rejects(R.burn(server, 'png', confirmed), 'cannot reveal without the private review layer');
+painted.length = 0;
+await R.burn(server, 'png', confirmed, server);
+assert.ok(draws.length >= 3 && draws.at(-1).length === 9 && draws.at(-1)[1] <= 200,
+  'the overlapping value is restored from already-protected pixels');
 window.OffscreenCanvas = class extends window.OffscreenCanvas { async convertToBlob() { return new window.Blob(['x'], { type: 'image/gif' }); } };
 await assert.rejects(R.burn(server, 'png', cov), 'a failed encode never returns an uncovered copy');
 console.log('review-editor: ok');

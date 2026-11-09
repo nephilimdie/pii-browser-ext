@@ -36,7 +36,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     GET_LAST_OPERATION:    () => getLastOperation(),
     SELECT_TEAM:           () => handleSelectTeam(msg),
     GET_TEAMS:             () => getTeams(),
-    REDACT_IMAGE:          () => handleRedactImage(msg),
+    REDACT_IMAGE:          () => handleRedactImage({ ...msg, confirmed: msg.confirmed === true
+      && sender.url?.startsWith(chrome.runtime.getURL('src/protect.html')) }),
     REDACT_DOCUMENT:       () => globalThis.PseudoraFiles.redactDocument(msg),
     OPEN_PROTECT:          () => globalThis.PseudoraFiles.openProtect(msg),
     TAKE_PROTECT_JOB:      () => globalThis.PseudoraFiles.takeJob(msg),
@@ -548,9 +549,9 @@ function postJson(baseUrl, path, headers, body) {
  *       and returns the echoed mode and the validated areas [{id, reason, bbox}]; an older Cloud
  *       that does not echo it covered every area (mode 'cover'). Without the editor (screenshot
  *       shortcut) uncertain areas stay covered by the server.
- * @param {{ data: string, format: string, visible?: boolean }} msg
+ * @param {{ data: string, format: string, visible?: boolean, confirmed?: boolean }} msg
  */
-async function handleRedactImage({ data, format, visible = false }) {
+async function handleRedactImage({ data, format, visible = false, confirmed = false }) {
   const s = await getSettings();
   if (!s.piiApiUrl) throw Object.assign(new Error('API URL not configured.'), { responseCode: 'not_configured' });
   if (typeof data !== 'string' || !data || !IMAGE_FORMATS.includes(format)) {
@@ -567,6 +568,7 @@ async function handleRedactImage({ data, format, visible = false }) {
   form.append('domain', core()?.requestFor(s.docType).image || 'generic_professional');
   form.append('face_style', FACE_STYLES.includes(s.faceStyle) ? s.faceStyle : FACE_STYLES[0]);
   form.append('review_default', visible === true ? 'visible' : 'cover');
+  if (confirmed) form.append('review_confirmed', '1');
 
   // The Cloud negotiates on Accept: without it the reply is raw image bytes, which this JSON parser refuses.
   const r = await post(s.piiApiUrl, '/v1/images/redact', { headers: { ...headers, Accept: 'application/json' }, body: form }, IMAGE_TIMEOUT_MS);
@@ -604,10 +606,31 @@ async function handleRedactImage({ data, format, visible = false }) {
   if (mode === 'visible' && (visible !== true || (Number.isSafeInteger(reviewCount) && reviewCount !== areas.length))) {
     throw Object.assign(new Error('Pseudora returned unreviewed areas.'), { responseCode: 'failed' });
   }
+  const protectedAreas = (Array.isArray(result.protected_areas) ? result.protected_areas : []).filter(a =>
+    typeof a?.id === 'string' && /^(text|visual):[0-9]+(?::[0-9]+)?$/.test(a.id)
+    && typeof a.type === 'string' && /^[A-Z][A-Z0-9_]{0,63}$/.test(a.type)
+    && Array.isArray(a.bbox) && a.bbox.length === 4 && a.bbox.every(n => typeof n === 'number' && n >= 0 && n <= 1)
+    && a.bbox[0] < a.bbox[2] && a.bbox[1] < a.bbox[3]);
+  if (confirmed && protectedAreas.length && (protectedAreas.length !== result.protected_areas?.length
+      || !result.confirmed_review || result.confirmed_review.content_type !== `image/${out}`
+      || typeof result.confirmed_review.image_base64 !== 'string')) {
+    throw Object.assign(new Error('Pseudora could not verify image review.'), { responseCode: 'failed' });
+  }
+  if (confirmed && protectedAreas.length) {
+    try {
+      const raw = result.confirmed_review.image_base64;
+      if (raw.length % 4 || !/^[A-Za-z0-9+/]+={0,2}$/.test(raw)
+          || !hasSignature(Uint8Array.from(atob(raw), c => c.charCodeAt(0)), out)) throw new Error('invalid layer');
+    } catch {
+      throw Object.assign(new Error('Pseudora returned an invalid review layer.'), { responseCode: 'failed' });
+    }
+  }
   return {
     safe: true, format: out, image_base64: result.image_base64,
     entity_count: result.entity_count, review_regions: Number.isSafeInteger(reviewCount) ? reviewCount : 0,
     review_default: mode, review_areas: areas,
+    protected_areas: protectedAreas,
+    ...(confirmed && protectedAreas.length ? { confirmed_review: result.confirmed_review } : {}),
     types, review_boxes: areas.map(a => [...a.bbox]),
   };
 }

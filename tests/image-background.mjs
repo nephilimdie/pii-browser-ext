@@ -7,12 +7,14 @@ import { src } from './helpers/env.mjs';
 const source = await src('background.js');
 let reply;
 let calls = [];
+let listener;
 const context = vm.createContext({
   AbortSignal, FormData, Blob, atob, btoa, Uint8Array, Number,
   crypto: { randomUUID: () => 'test-context' },
   fetch: async (url, init) => { calls.push({ url, init }); return reply(); },
   chrome: {
-    runtime: { onMessage: { addListener() {} }, onInstalled: { addListener() {} } },
+    runtime: { id: 'ext', getURL: path => `chrome-extension://ext/${path}`,
+      onMessage: { addListener(fn) { listener = fn; } }, onInstalled: { addListener() {} } },
     storage: { sync: { get: async d => d }, local: { get: async d => d, set: async () => {} } },
   },
 });
@@ -24,6 +26,7 @@ context.testSettings = () => settings;
 vm.runInContext(`getSettings = async () => testSettings();
   getAuthHeaders = async () => ({ Authorization: 'Bearer t', 'X-Pii-Client': 'browser_extension' });`, context);
 const run = code => vm.runInContext(code, context);
+const routed = (msg, url) => new Promise(resolve => listener(msg, { id: 'ext', url }, resolve));
 
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]);
 const ORIGINAL = Buffer.from('original-screenshot').toString('base64');
@@ -52,8 +55,27 @@ assert.equal(calls[0].init.headers['Content-Type'], undefined, 'fetch must set t
 assert.ok(calls[0].init.signal instanceof AbortSignal);
 assert.deepEqual(JSON.parse(JSON.stringify(ok)), {
   safe: true, format: 'png', image_base64: Buffer.from(PNG).toString('base64'),
-  entity_count: 3, review_regions: 2, review_default: 'cover', review_areas: [], types: ['PERSON', 'FACE'], review_boxes: [],
+  entity_count: 3, review_regions: 2, review_default: 'cover', review_areas: [], protected_areas: [], types: ['PERSON', 'FACE'], review_boxes: [],
 });
+
+reply = image(PNG, { protected_areas: [{ id: 'text:0:0', type: 'PERSON', bbox: [0.1, 0.1, 0.2, 0.2] }],
+  confirmed_review: { content_type: 'image/png', image_base64: Buffer.from(PNG).toString('base64') } });
+const confirmed = await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png', confirmed: true })`);
+assert.equal(calls.at(-1).init.body.get('review_confirmed'), '1');
+assert.equal(confirmed.protected_areas[0].type, 'PERSON');
+assert.ok(confirmed.confirmed_review.image_base64);
+reply = image(PNG, { protected_areas: [{ id: 'text:0:0', type: 'PERSON', bbox: [0.1, 0.1, 0.2, 0.2] }] });
+assert.equal((await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png', confirmed: true })`).catch(e => e)).responseCode, 'failed');
+reply = image(PNG, { protected_areas: [] });
+assert.equal((await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png', confirmed: true })`)).confirmed_review, undefined);
+reply = image(PNG, { protected_areas: [{ id: 'text:0:0', type: 'PERSON', bbox: [0.1, 0.1, 0.2, 0.2] }],
+  confirmed_review: { content_type: 'image/png', image_base64: Buffer.from(PNG).toString('base64') } });
+const fromChat = await routed({ type: 'REDACT_IMAGE', data: ORIGINAL, format: 'png', confirmed: true }, 'https://chatgpt.com/');
+assert.equal(calls.at(-1).init.body.get('review_confirmed'), null, 'a content script cannot ask for the sensitive layer');
+assert.equal(fromChat.confirmed_review, undefined);
+const fromExtension = await routed({ type: 'REDACT_IMAGE', data: ORIGINAL, format: 'png', confirmed: true }, 'chrome-extension://ext/src/protect.html');
+assert.equal(calls.at(-1).init.body.get('review_confirmed'), '1');
+assert.ok(fromExtension.confirmed_review.image_base64);
 
 // Editor flows ask for visible areas; the echo and every area must come back, else fail closed.
 const areas = [{ id: 0, reason: 'low_confidence', bbox: [0.1, 0.2, 0.3, 0.4] }, { id: 1, reason: 'weird', bbox: [0.5, 0.5, 0.6, 0.6] }];

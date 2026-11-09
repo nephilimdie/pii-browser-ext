@@ -29,7 +29,9 @@ async function boot({ job, tabUrl = 'https://chatgpt.com/c/1', reply, fetchOk = 
   return { window, d: window.document, sent, tabMessages };
 }
 const okImage = () => ({ safe: true, format: 'png', image_base64: PNG_B64, entity_count: 2, types: ['FACE'], review_default: 'visible',
-  review_areas: [{ id: 0, reason: 'uncertain_mark', bbox: [0.1, 0.1, 0.3, 0.2] }] });
+  review_areas: [{ id: 0, reason: 'uncertain_mark', bbox: [0.1, 0.1, 0.3, 0.2] }],
+  protected_areas: [{ id: 'visual:0', type: 'FACE', bbox: [0.2, 0.2, 0.4, 0.4] }],
+  confirmed_review: { content_type: 'image/png', image_base64: PNG_B64 } });
 
 // Context menu on a ChatGPT tab: fetched, protected with visible areas, editor, "Allega alla chat".
 {

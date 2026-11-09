@@ -181,6 +181,10 @@
 .pii-rev-tag { position: absolute; top: -20px; left: -2px; padding: 2px 6px; border-radius: 6px; white-space: nowrap;
   background: var(--pii-warn); color: #fff; font: 700 11px/14px var(--pii-font); }
 .pii-rev-box.is-covered .pii-rev-tag { background: var(--pii-ink); }
+.pii-rev-box.is-confirmed { background: transparent; border: 1px solid var(--pii-indigo); }
+.pii-rev-box.is-confirmed.is-visible { border-style: dashed; border-color: var(--pii-warn); }
+.pii-rev-box.is-confirmed .pii-rev-tag { background: var(--pii-ink); }
+.pii-rev-box.is-confirmed:disabled { cursor: default; }
 .pii-rev-remove { position: absolute; top: -10px; right: -10px; width: 20px; height: 20px; border-radius: 50%; border: 0; padding: 0;
   background: var(--pii-indigo); color: #fff; font: 700 14px/20px var(--pii-font); cursor: pointer; pointer-events: auto; }
 .pii-rev-tools { display: flex; flex-wrap: wrap; gap: 6px; }
