@@ -1,9 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "Pseudora",
-  "version": "1.2.1",
-  "description": "Strip names, emails, IBANs and tax IDs from your prompt before ChatGPT, Claude or Gemini ever sees it.",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "name": "__MSG_extName__",
+  "version": "1.3.0",
+  "description": "__MSG_extDescription__",
+  "default_locale": "it",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
   "host_permissions": [
     "https://chatgpt.com/*",
     "https://claude.ai/*",
@@ -18,25 +23,59 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://chatgpt.com/*", "https://claude.ai/*", "https://gemini.google.com/*"],
-      "js": ["src/composer.js", "src/send-guard.js", "src/image-guard.js", "src/screenshot.js", "src/content.js"],
-      "css": ["src/content.css"],
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*"
+      ],
+      "js": [
+        "src/core.js",
+        "src/composer.js",
+        "src/send-guard.js",
+        "src/panel.js",
+        "src/image-guard.js",
+        "src/screenshot.js",
+        "src/content.js"
+      ],
+      "css": [
+        "src/tokens.css",
+        "src/content.css"
+      ],
       "run_at": "document_idle"
     }
   ],
   "web_accessible_resources": [
     {
-      "resources": ["src/oauth-callback.html", "icons/icon48.png"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "src/oauth-callback.html",
+        "icons/icon48.png"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self';"
   },
   "commands": {
+    "anonymize": {
+      "suggested_key": {
+        "default": "Alt+Shift+A"
+      },
+      "description": "__MSG_cmdAnonymize__"
+    },
+    "restore": {
+      "suggested_key": {
+        "default": "Alt+Shift+R"
+      },
+      "description": "__MSG_cmdRestore__"
+    },
     "protected-screenshot": {
-      "suggested_key": { "default": "Alt+Shift+S" },
-      "description": "Screenshot protetto"
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
+      "description": "__MSG_cmdScreenshot__"
     }
   },
   "action": {
@@ -45,6 +84,7 @@
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
-    }
+    },
+    "default_title": "__MSG_extName__"
   }
 }

@@ -4,8 +4,9 @@ import { Window } from 'happy-dom';
 
 // Content-side image guard on a fake ChatGPT composer: originals are swallowed in the
 // capture phase, only the Cloud-confirmed copy reaches the site, failures fail closed.
-const composerSource = await readFile(new URL('../src/composer.js', import.meta.url), 'utf8');
-const source = await readFile(new URL('../src/image-guard.js', import.meta.url), 'utf8');
+import { src, i18n } from './helpers/env.mjs';
+const [composerSource, source, coreSource, panelSource] = await Promise.all(['composer.js', 'image-guard.js', 'core.js', 'panel.js'].map(src));
+const it = await i18n('it');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const REDACTED_B64 = Buffer.from('redacted-bytes').toString('base64');
 
@@ -19,9 +20,13 @@ function boot({ host = 'chatgpt.com', sync = { interceptSend: true, protectImage
   window.fetch = async () => { networkCalls++; throw new Error('content scripts must not fetch'); };
   window.XMLHttpRequest = function () { networkCalls++; throw new Error('no XHR'); };
   window.chrome = {
+    i18n: it,
     runtime: {
-      id: 'ext', lastError: null,
-      sendMessage(msg, cb) { sent.push(msg); Promise.resolve(typeof reply === 'function' ? reply(msg) : reply).then(cb); },
+      id: 'ext', lastError: null, getURL: p => `chrome-extension://ext/${p}`,
+      sendMessage(msg, cb) {
+        if (msg.type === 'GET_DOC_TYPES') { Promise.resolve({ presets: [], policies: [] }).then(cb); return; }   // panel header only
+        sent.push(msg); Promise.resolve(typeof reply === 'function' ? reply(msg) : reply).then(cb);
+      },
     },
     storage: {
       sync: { get(defaults, cb) { cb({ ...defaults, ...sync }); } },
@@ -30,7 +35,9 @@ function boot({ host = 'chatgpt.com', sync = { interceptSend: true, protectImage
   };
   window.URL.createObjectURL = () => 'blob:preview';
   window.URL.revokeObjectURL = () => {};
+  window.eval(coreSource);
   window.eval(composerSource);
+  window.eval(panelSource);
   window.eval(source);
   const site = [];                                   // what the page's own handlers receive
   const files = ev => [...(ev.clipboardData || ev.dataTransfer || ev.target).files].map(f => f.name);
@@ -85,6 +92,14 @@ const okReply = { safe: true, format: 'png', image_base64: REDACTED_B64, entity_
   assert.match(t.panel().textContent, /2 elementi: volti, IBAN/);
   assert.match(t.panel().textContent, /1 area incerta/);
   assert.ok(t.panel().querySelector('img.pii-img-preview'));
+  // Same shell as the text panel: a labelled dialog; the preview opens a zoom view.
+  assert.equal(t.panel().getAttribute('role'), 'dialog');
+  assert.ok(t.panel().getAttribute('aria-labelledby'));
+  t.panel().querySelector('.pii-img-figure').click();
+  assert.ok(t.panel().querySelector('.pii-zoom img'), 'click-to-zoom');
+  t.panel().querySelector('.pii-zoom').dispatchEvent(new t.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  assert.equal(t.panel().querySelector('.pii-zoom'), null, 'Esc closes the zoom first');
+  assert.ok(t.panel(), 'the panel stays open');
   // the site renders an attachment thumbnail when it receives the protected file
   t.window.addEventListener('paste', () => t.document.getElementById('att').appendChild(t.document.createElement('img')));
   t.click('Usa immagine protetta');
@@ -92,6 +107,17 @@ const okReply = { safe: true, format: 'png', image_base64: REDACTED_B64, entity_
   await sleep(40);
   assert.equal(t.panel(), null, 'panel closes once the attachment shows up');
   assert.equal(t.network(), 0, 'content script made no network call');
+}
+
+// Doubtful areas are outlined on the preview at their relative position.
+{
+  const t = boot({ reply: { ...okReply, review_boxes: [[0.1, 0.2, 0.5, 0.4]] } });
+  t.paste([t.file('a.png', 'image/png')]);
+  await sleep(20);
+  const box = t.panel().querySelector('.pii-img-frame .pii-review-box');
+  assert.equal(box.style.left, '10%');
+  assert.equal(box.style.width, '40%');
+  assert.equal(box.textContent, '1');
 }
 
 // Annulla on review: nothing reaches the site.
@@ -111,7 +137,7 @@ const okReply = { safe: true, format: 'png', image_base64: REDACTED_B64, entity_
   await sleep(20);
   t.click('Usa immagine protetta');
   await sleep(120);
-  assert.match(t.panel().textContent, /Scaricala e allegala a mano/);
+  assert.match(t.panel().textContent, /scaricala e allegala a mano/);
   let downloaded = null;
   t.document.addEventListener('click', e => { if (e.target.download) downloaded = e.target.download; }, true);
   t.click('Scarica');
@@ -125,6 +151,7 @@ for (const reply of [{ error: 'Pseudora: HTTP 503', responseCode: 'unavailable' 
   t.paste([t.file('a.png', 'image/png')]);
   await sleep(20);
   assert.match(t.panel().textContent, /L'immagine originale non è stata inviata/);
+  assert.ok(t.panel().querySelector('[role="alert"] .pii-notice'), 'error announced in the alert region');
   assert.equal(t.panel().querySelector('.pii-img-use'), null, 'no way to use an unconfirmed image');
   assert.deepEqual(t.site, []);
 }

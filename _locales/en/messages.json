@@ -1,1 +1,860 @@
-{"extName":{"message":"Pseudora"}}
+{
+  "extName": {
+    "message": "Pseudora"
+  },
+  "extDescription": {
+    "message": "Strip names, emails, IBANs and tax IDs from your prompt before ChatGPT, Claude or Gemini ever sees it."
+  },
+  "cmdAnonymize": {
+    "message": "Anonymize the text or open the panel"
+  },
+  "cmdRestore": {
+    "message": "Restore the original text"
+  },
+  "cmdScreenshot": {
+    "message": "Protected screenshot"
+  },
+  "brandSub": {
+    "message": "Data protection for AI"
+  },
+  "statusSetup": {
+    "message": "Not set up"
+  },
+  "statusOn": {
+    "message": "Protection on"
+  },
+  "statusOff": {
+    "message": "Send not protected"
+  },
+  "tabsLabel": {
+    "message": "Sections"
+  },
+  "tabProtect": {
+    "message": "Protection"
+  },
+  "tabAccount": {
+    "message": "Account"
+  },
+  "tabHelp": {
+    "message": "Help"
+  },
+  "onboardTitle": {
+    "message": "Sign in to protect your messages"
+  },
+  "onboardText": {
+    "message": "With a Pseudora account, personal data is replaced before it reaches ChatGPT, Claude or Gemini."
+  },
+  "onboardSelfHosted": {
+    "message": "Using a self-hosted instance or an API key?"
+  },
+  "loginButton": {
+    "message": "Sign in with Pseudora"
+  },
+  "loginConnecting": {
+    "message": "Opening the sign-in page…"
+  },
+  "loginContinueInTab": {
+    "message": "Finish signing in in the new tab."
+  },
+  "errLoginFailed": {
+    "message": "Could not start sign-in. Check your connection and try again."
+  },
+  "errInvalidUrl": {
+    "message": "The server address is not valid."
+  },
+  "errHostDenied": {
+    "message": "Access to the server was denied: Pseudora cannot connect without it."
+  },
+  "logoutButton": {
+    "message": "Sign out"
+  },
+  "accountLoggedOut": {
+    "message": "You are not signed in."
+  },
+  "accountUser": {
+    "message": "User"
+  },
+  "groupSend": {
+    "message": "Sending"
+  },
+  "groupDocument": {
+    "message": "Document"
+  },
+  "interceptTitle": {
+    "message": "Protect sending"
+  },
+  "interceptDesc": {
+    "message": "When you press Enter, Pseudora anonymizes the text before it leaves."
+  },
+  "imagesTitle": {
+    "message": "Protect images too"
+  },
+  "imagesDesc": {
+    "message": "Screenshots and images pasted into ChatGPT and Claude are redacted before upload."
+  },
+  "imagesNeedsIntercept": {
+    "message": "Works only while “Protect sending” is on."
+  },
+  "fieldDocType": {
+    "message": "Document type"
+  },
+  "fieldDocTypeHint": {
+    "message": "Applies to text and images."
+  },
+  "docGroupPresets": {
+    "message": "Document types"
+  },
+  "docGroupTeam": {
+    "message": "Team policies"
+  },
+  "docGroupOther": {
+    "message": "Saved choice"
+  },
+  "docUnavailable": {
+    "message": "{name} (unavailable)"
+  },
+  "doc_generic_professional": {
+    "message": "General"
+  },
+  "doc_contract_analysis": {
+    "message": "Contract or deed"
+  },
+  "doc_hr_payroll": {
+    "message": "Payroll and HR"
+  },
+  "doc_tax_accounting": {
+    "message": "Tax and accounting"
+  },
+  "doc_real_estate_insurance": {
+    "message": "Real estate and insurance"
+  },
+  "doc_fine_appeal": {
+    "message": "Traffic fine appeal"
+  },
+  "doc_condominio": {
+    "message": "Condominium"
+  },
+  "fieldMode": {
+    "message": "Mode"
+  },
+  "modeTag": {
+    "message": "Reversible labels"
+  },
+  "modeSurrogate": {
+    "message": "Realistic fakes"
+  },
+  "modeTagShort": {
+    "message": "The original can be restored."
+  },
+  "modeSurrogateShort": {
+    "message": "The text reads naturally; the mapping is kept for restoring."
+  },
+  "modeTagHint": {
+    "message": "“Mario Rossi” becomes [PERSON_1] and can be restored."
+  },
+  "modeSurrogateHint": {
+    "message": "“Mario Rossi” becomes a realistic name, so the text still reads naturally."
+  },
+  "fieldFaces": {
+    "message": "Faces in images"
+  },
+  "faceBlur": {
+    "message": "Blur"
+  },
+  "facePixelate": {
+    "message": "Pixelate"
+  },
+  "faceBlack": {
+    "message": "Black box"
+  },
+  "faceHint": {
+    "message": "Blur and pixelate cannot be undone."
+  },
+  "fieldLanguage": {
+    "message": "Text language"
+  },
+  "langIt": {
+    "message": "Italian"
+  },
+  "langEn": {
+    "message": "English"
+  },
+  "langDe": {
+    "message": "German"
+  },
+  "langFr": {
+    "message": "French"
+  },
+  "langEs": {
+    "message": "Spanish"
+  },
+  "langPt": {
+    "message": "Portuguese"
+  },
+  "saved": {
+    "message": "Saved"
+  },
+  "shotButton": {
+    "message": "Protected screenshot"
+  },
+  "fieldTeam": {
+    "message": "Team"
+  },
+  "teamHint": {
+    "message": "The selected team's policies apply to text and images."
+  },
+  "advancedTitle": {
+    "message": "Advanced: self-hosted instance and API key"
+  },
+  "advancedIntro": {
+    "message": "Only needed for your own Pseudora instance or an API key. For Pseudora Cloud, change nothing."
+  },
+  "fieldApiUrl": {
+    "message": "Server address"
+  },
+  "httpWarn": {
+    "message": "The address uses unencrypted HTTP: credentials travel in clear text. Use HTTPS."
+  },
+  "fieldApiKey": {
+    "message": "API key (instead of signing in)"
+  },
+  "toggleKey": {
+    "message": "Show or hide the key"
+  },
+  "fieldClientId": {
+    "message": "OAuth client ID"
+  },
+  "clientIdPlaceholder": {
+    "message": "Detected from the server"
+  },
+  "clientIdHint": {
+    "message": "Detected automatically. Change it only for a custom instance."
+  },
+  "saveConnection": {
+    "message": "Save connection"
+  },
+  "testConnection": {
+    "message": "Test"
+  },
+  "connectionSaved": {
+    "message": "Connection saved."
+  },
+  "connectionTesting": {
+    "message": "Testing the connection…"
+  },
+  "connectionOk": {
+    "message": "Connected: you can anonymize."
+  },
+  "connectionAuth": {
+    "message": "Invalid or expired credentials: sign in again or check the API key."
+  },
+  "connectionNetwork": {
+    "message": "Server unreachable: check the address and your connection."
+  },
+  "connectionServer": {
+    "message": "The server returned an error. Try again shortly."
+  },
+  "connectionFailed": {
+    "message": "Connection failed."
+  },
+  "resetCache": {
+    "message": "Reset sign-in and cache…"
+  },
+  "resetConfirm": {
+    "message": "You will be signed out and the OAuth client ID forgotten. Preferences are kept."
+  },
+  "resetConfirmYes": {
+    "message": "Reset"
+  },
+  "resetDone": {
+    "message": "Sign-in and cache reset."
+  },
+  "helpHowTitle": {
+    "message": "How it works"
+  },
+  "helpStep1": {
+    "message": "Sign in with your Pseudora account."
+  },
+  "helpStep2": {
+    "message": "Open ChatGPT, Claude or Gemini and write as usual."
+  },
+  "helpStep3": {
+    "message": "With “Protect sending” on, press Enter: Pseudora replaces names, tax IDs, IBANs and emails before the text leaves."
+  },
+  "helpStep4": {
+    "message": "The Pseudora button next to the field shows the status and opens the panel with what was replaced."
+  },
+  "helpStep5": {
+    "message": "“Restore original” puts the text with personal data back in the field."
+  },
+  "helpModesTitle": {
+    "message": "Labels or fakes"
+  },
+  "helpShortcutsTitle": {
+    "message": "Keyboard shortcuts"
+  },
+  "helpEditShortcuts": {
+    "message": "Change shortcuts"
+  },
+  "helpSitesTitle": {
+    "message": "Supported sites"
+  },
+  "helpSitesNote": {
+    "message": "(images: ChatGPT and Claude)"
+  },
+  "helpMore": {
+    "message": "Full guide and privacy notice at"
+  },
+  "footerSource": {
+    "message": "Source code"
+  },
+  "shortcutNotSet": {
+    "message": "not set"
+  },
+  "shortcutAnonymize": {
+    "message": "{keys} anonymize"
+  },
+  "shortcutRestore": {
+    "message": "{keys} restore"
+  },
+  "shortcutUnsupportedSite": {
+    "message": "This shortcut works on ChatGPT, Claude and Gemini."
+  },
+  "toolbarSetup": {
+    "message": "Pseudora · sign in"
+  },
+  "toolbarSetupAria": {
+    "message": "Pseudora is not set up. Open the panel to sign in."
+  },
+  "toolbarOff": {
+    "message": "Pseudora · send unprotected"
+  },
+  "toolbarOffAria": {
+    "message": "Pseudora: send protection off. Document type {doc}. Open the panel to anonymize."
+  },
+  "toolbarProtected": {
+    "message": "Protected"
+  },
+  "toolbarProtectedTeam": {
+    "message": "Protected · {team}"
+  },
+  "toolbarOnAria": {
+    "message": "Pseudora: send protection on, team {team}, document type {doc}. Open the panel."
+  },
+  "toolbarBusy": {
+    "message": "Anonymizing…"
+  },
+  "panelClose": {
+    "message": "Close the panel"
+  },
+  "panelSubtitle": {
+    "message": "{doc} · {mode}"
+  },
+  "tabAnonymize": {
+    "message": "Anonymize"
+  },
+  "tabResult": {
+    "message": "Result"
+  },
+  "paneInterceptOn": {
+    "message": "Send protection on: pressing Enter anonymizes the text before it leaves."
+  },
+  "paneInterceptOff": {
+    "message": "Send protection off: anonymize from here, or turn it on in the Pseudora popup."
+  },
+  "actionAnonymize": {
+    "message": "Anonymize"
+  },
+  "actionAnonymizeSend": {
+    "message": "Anonymize and send"
+  },
+  "actionCopyProtected": {
+    "message": "Copy protected text"
+  },
+  "actionCopyOriginal": {
+    "message": "Copy original"
+  },
+  "actionRestore": {
+    "message": "Restore original"
+  },
+  "actionRestoreHint": {
+    "message": "Puts the text with personal data back in the field."
+  },
+  "actionRetry": {
+    "message": "Try again"
+  },
+  "actionLogin": {
+    "message": "Sign in again"
+  },
+  "actionCancel": {
+    "message": "Cancel"
+  },
+  "actionClose": {
+    "message": "Close"
+  },
+  "copied": {
+    "message": "Copied"
+  },
+  "copyFailed": {
+    "message": "Copy failed"
+  },
+  "emptyComposer": {
+    "message": "The message field is empty: write the text to protect."
+  },
+  "resultEmpty": {
+    "message": "No result yet. Write in the field and press Anonymize: you will see what was replaced and with which label."
+  },
+  "resultSummaryOne": {
+    "message": "1 personal data item replaced"
+  },
+  "resultSummaryMany": {
+    "message": "{n} personal data items replaced"
+  },
+  "resultSummaryNone": {
+    "message": "No personal data found: the text is unchanged."
+  },
+  "resultMapCaption": {
+    "message": "What was replaced"
+  },
+  "resultColSent": {
+    "message": "Sent"
+  },
+  "resultColOriginal": {
+    "message": "Original"
+  },
+  "resultColType": {
+    "message": "Type"
+  },
+  "resultValueHidden": {
+    "message": "not shown"
+  },
+  "resultProtectedText": {
+    "message": "Protected text"
+  },
+  "resultOriginalText": {
+    "message": "Original text (contains personal data)"
+  },
+  "restoreDone": {
+    "message": "Original text restored in the field."
+  },
+  "restoreNothing": {
+    "message": "Nothing to restore: anonymize a text first."
+  },
+  "feedbackQuestion": {
+    "message": "Is this result useful?"
+  },
+  "feedbackYes": {
+    "message": "Yes"
+  },
+  "feedbackNo": {
+    "message": "No"
+  },
+  "feedbackThanks": {
+    "message": "Thanks for the feedback."
+  },
+  "feedbackFailed": {
+    "message": "Could not send the feedback."
+  },
+  "fieldDocTypeShort": {
+    "message": "Document type"
+  },
+  "errTitle_policy_blocked": {
+    "message": "Blocked by your team's policy"
+  },
+  "errDetail_policy_blocked": {
+    "message": "The text contains data your policy does not allow. Remove it or ask your team admin. Nothing was sent."
+  },
+  "errDetail_policy_types": {
+    "message": "The text contains: {types}. Remove this data or ask your team admin. Nothing was sent."
+  },
+  "errTitle_auth": {
+    "message": "Sign-in expired"
+  },
+  "errDetail_auth": {
+    "message": "Your session is no longer valid. Sign in again to continue. Nothing was sent."
+  },
+  "errTitle_not_configured": {
+    "message": "Pseudora is not connected"
+  },
+  "errDetail_not_configured": {
+    "message": "Sign in with your Pseudora account to protect the text. Nothing was sent."
+  },
+  "errTitle_server": {
+    "message": "Service unavailable"
+  },
+  "errDetail_server": {
+    "message": "Pseudora did not answer correctly. Nothing was sent: try again shortly."
+  },
+  "errTitle_timeout": {
+    "message": "Pseudora did not answer in time"
+  },
+  "errDetail_timeout": {
+    "message": "Nothing was sent. Try again; split very long texts."
+  },
+  "errTitle_network": {
+    "message": "No connection"
+  },
+  "errDetail_network": {
+    "message": "Pseudora could not be reached. Check your network. Nothing was sent."
+  },
+  "errTitle_rate_limited": {
+    "message": "Too many requests"
+  },
+  "errDetail_rate_limited": {
+    "message": "Wait a few seconds and try again. Nothing was sent."
+  },
+  "errTitle_quota": {
+    "message": "Pseudora credits used up"
+  },
+  "errDetail_quota": {
+    "message": "This period's credit is used up; see your account on pseudora.cloud. Nothing was sent."
+  },
+  "errTitle_unsafe": {
+    "message": "Protection not confirmed"
+  },
+  "errDetail_unsafe": {
+    "message": "Pseudora could not confirm the text is protected. Nothing was sent."
+  },
+  "errTitle_editor_write_failed": {
+    "message": "Protected text not inserted"
+  },
+  "errDetail_editor_write_failed": {
+    "message": "The protected text could not be written into the site's field. Nothing was sent: try again or copy the protected text."
+  },
+  "errTitle_reloaded": {
+    "message": "Pseudora was updated"
+  },
+  "errDetail_reloaded": {
+    "message": "Reload this page to continue. Nothing was sent."
+  },
+  "errTitle_failed": {
+    "message": "Anonymization failed"
+  },
+  "errDetail_failed": {
+    "message": "An unexpected error occurred. Nothing was sent."
+  },
+  "errNotCapturable": {
+    "message": "Pseudora cannot capture this page (Chrome pages, Web Store, PDFs)."
+  },
+  "errCaptureFailed": {
+    "message": "Pseudora could not capture the tab."
+  },
+  "imgPanelTitle": {
+    "message": "Protected image"
+  },
+  "imgSubtitle": {
+    "message": "Document type: {doc}"
+  },
+  "imgWorking": {
+    "message": "Protecting the image…"
+  },
+  "imgAttaching": {
+    "message": "Attaching the protected image…"
+  },
+  "imgErrorTitle": {
+    "message": "Image not protected"
+  },
+  "imgFallbackTitle": {
+    "message": "Attach it by hand"
+  },
+  "imgFallback": {
+    "message": "The protected image could not be attached: download it and attach it by hand. The original was not sent. If it already shows among the attachments, ignore this."
+  },
+  "imgDownload": {
+    "message": "Download {name}"
+  },
+  "imgUse": {
+    "message": "Use protected image"
+  },
+  "imgPreviewAlt": {
+    "message": "Preview of the protected image"
+  },
+  "imgZoomOpen": {
+    "message": "Click to enlarge and check"
+  },
+  "imgZoomTitle": {
+    "message": "Enlarged preview"
+  },
+  "imgZoomClose": {
+    "message": "Close preview"
+  },
+  "imgSummary": {
+    "message": "Hidden: {summary}."
+  },
+  "imgSummaryNone": {
+    "message": "no personal data found"
+  },
+  "imgCountOne": {
+    "message": "1 item"
+  },
+  "imgCountMany": {
+    "message": "{n} items"
+  },
+  "imgReviewOne": {
+    "message": "1 uncertain area hidden to be safe (outlined)."
+  },
+  "imgReviewMany": {
+    "message": "{n} uncertain areas hidden to be safe (outlined)."
+  },
+  "imgNotSent": {
+    "message": "The original image was not sent."
+  },
+  "img_heic": {
+    "message": "HEIC photos are not supported: convert to JPEG/PNG and try again."
+  },
+  "img_unsupported": {
+    "message": "Unsupported image format: convert to JPEG/PNG and try again."
+  },
+  "img_image_unsupported": {
+    "message": "Unsupported image format: convert to JPEG/PNG and try again."
+  },
+  "img_too_many": {
+    "message": "You can protect at most {max} images at a time."
+  },
+  "img_too_large": {
+    "message": "Image too large: the limit is 10 MB."
+  },
+  "img_image_too_large": {
+    "message": "Image too large (too many pixels): shrink it and try again."
+  },
+  "img_invalid_document": {
+    "message": "The file is not a valid image."
+  },
+  "img_ocr_no_text": {
+    "message": "Pseudora found no text, faces or codes in this image, so it cannot confirm it is protected. If it is safe, turn off “Protect images too” and try again."
+  },
+  "img_quota": {
+    "message": "Pseudora credits used up."
+  },
+  "img_monthly_quota_exceeded": {
+    "message": "Pseudora credits used up."
+  },
+  "img_in_progress": {
+    "message": "Another image is being processed: wait a few seconds and try again."
+  },
+  "img_rate_limited": {
+    "message": "Too many requests to Pseudora: try again shortly."
+  },
+  "img_rate_limit_exceeded": {
+    "message": "Too many requests to Pseudora: try again shortly."
+  },
+  "img_busy": {
+    "message": "Pseudora is busy: try again shortly."
+  },
+  "img_timeout": {
+    "message": "Pseudora did not answer in time."
+  },
+  "img_unavailable": {
+    "message": "Pseudora image protection is unavailable right now."
+  },
+  "img_acl_forbidden": {
+    "message": "Your team role does not allow protecting images."
+  },
+  "img_not_configured": {
+    "message": "Pseudora is not set up: open the extension popup and sign in."
+  },
+  "img_network": {
+    "message": "Pseudora is unreachable: check your connection."
+  },
+  "img_failed": {
+    "message": "Pseudora could not protect the image."
+  },
+  "shotHint": {
+    "message": "Drag to select the area to protect, or press Enter for the whole visible area. Esc cancels."
+  },
+  "shotFullArea": {
+    "message": "Whole visible area"
+  },
+  "shotCancel": {
+    "message": "Cancel"
+  },
+  "shotWorking": {
+    "message": "Protecting the screenshot…"
+  },
+  "shotAttached": {
+    "message": "Protected screenshot attached."
+  },
+  "shotCopied": {
+    "message": "Protected screenshot copied to the clipboard."
+  },
+  "shotCopyFailed": {
+    "message": "Protected screenshot ready, but the browser blocked copying to the clipboard."
+  },
+  "shotCopy": {
+    "message": "Copy to clipboard"
+  },
+  "oauthWorkingTitle": {
+    "message": "Signing in…"
+  },
+  "oauthWorkingText": {
+    "message": "Connecting the extension to your account."
+  },
+  "oauthOkTitle": {
+    "message": "Signed in"
+  },
+  "oauthOkTitleName": {
+    "message": "Signed in as {name}"
+  },
+  "oauthOkText": {
+    "message": "You can close this tab and go back to the chat."
+  },
+  "oauthDeniedTitle": {
+    "message": "Sign-in cancelled"
+  },
+  "oauthDeniedText": {
+    "message": "You did not authorize the extension. Nothing was shared. You can try again any time."
+  },
+  "oauthErrorTitle": {
+    "message": "Sign-in failed"
+  },
+  "oauthErrorText": {
+    "message": "Connecting to Pseudora did not work. Try again; if it happens again, reopen the extension popup."
+  },
+  "oauthNoCode": {
+    "message": "This page opened without a sign-in code. Start again."
+  },
+  "oauthRetryFailed": {
+    "message": "Could not restart sign-in. Open the extension popup and press “Sign in with Pseudora”."
+  },
+  "oauthCloseTab": {
+    "message": "Close the tab"
+  },
+  "entity_PERSON": {
+    "message": "Person"
+  },
+  "entity_FISCAL_CODE": {
+    "message": "Tax code"
+  },
+  "entity_IBAN": {
+    "message": "IBAN"
+  },
+  "entity_EMAIL": {
+    "message": "Email"
+  },
+  "entity_PHONE": {
+    "message": "Phone"
+  },
+  "entity_ADDRESS": {
+    "message": "Address"
+  },
+  "entity_DATE_OF_BIRTH": {
+    "message": "Date of birth"
+  },
+  "entity_CREDIT_CARD": {
+    "message": "Credit card"
+  },
+  "entity_LICENSE_PLATE": {
+    "message": "License plate"
+  },
+  "entity_VAT_NUMBER": {
+    "message": "VAT number"
+  },
+  "entity_PEC": {
+    "message": "Certified email (PEC)"
+  },
+  "entity_ORGANIZATION": {
+    "message": "Organization"
+  },
+  "entity_LOCATION": {
+    "message": "Place"
+  },
+  "entity_IP_ADDRESS": {
+    "message": "IP address"
+  },
+  "entity_URL": {
+    "message": "Web address"
+  },
+  "entity_ID_DOCUMENT": {
+    "message": "ID document"
+  },
+  "entity_IDENTITY_CARD": {
+    "message": "Identity card"
+  },
+  "entity_PASSPORT": {
+    "message": "Passport"
+  },
+  "entity_DRIVER_LICENSE": {
+    "message": "Driving licence"
+  },
+  "entity_HEALTH_CARD": {
+    "message": "Health card"
+  },
+  "entity_DATE": {
+    "message": "Date"
+  },
+  "entity_AGE": {
+    "message": "Age"
+  },
+  "entity_BANK_ACCOUNT": {
+    "message": "Bank account"
+  },
+  "entity_SWIFT": {
+    "message": "SWIFT code"
+  },
+  "entity_MEDICAL": {
+    "message": "Health data"
+  },
+  "entity_USERNAME": {
+    "message": "Username"
+  },
+  "entity_PASSWORD": {
+    "message": "Password"
+  },
+  "entity_API_KEY": {
+    "message": "API key"
+  },
+  "entity_SECRET": {
+    "message": "Secret"
+  },
+  "entity_FACE": {
+    "message": "Face"
+  },
+  "entity_BARCODE": {
+    "message": "QR/barcode"
+  },
+  "entity_SIGNATURE": {
+    "message": "Signature"
+  },
+  "entity_STAMP": {
+    "message": "Stamp"
+  },
+  "entities_FACE": {
+    "message": "faces"
+  },
+  "entities_BARCODE": {
+    "message": "QR/barcodes"
+  },
+  "entities_LICENSE_PLATE": {
+    "message": "license plates"
+  },
+  "entities_PERSON": {
+    "message": "names"
+  },
+  "entities_EMAIL": {
+    "message": "emails"
+  },
+  "entities_PHONE": {
+    "message": "phone numbers"
+  },
+  "entities_IBAN": {
+    "message": "IBANs"
+  },
+  "entities_FISCAL_CODE": {
+    "message": "tax codes"
+  },
+  "entities_ADDRESS": {
+    "message": "addresses"
+  },
+  "entities_DATE_OF_BIRTH": {
+    "message": "dates of birth"
+  },
+  "entities_SIGNATURE": {
+    "message": "signatures"
+  },
+  "entities_STAMP": {
+    "message": "stamps"
+  },
+  "entities_CREDIT_CARD": {
+    "message": "credit cards"
+  }
+}

@@ -7,7 +7,8 @@
  */
 
 // Shared pure logic (document type, error kinds, i18n). Absent only in Node tests.
-if (typeof importScripts === 'function') importScripts('core.js');
+const loadScript = /** @type {any} */ (globalThis).importScripts;
+if (typeof loadScript === 'function') loadScript.call(globalThis, 'core.js');
 const core = () => globalThis.PseudoraCore;
 
 // ── Message router ────────────────────────────────────────────────────────────
@@ -24,6 +25,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     GET_DOC_TYPES:         () => handleDocTypes(),
     GET_STATUS:            () => handleStatus(),
     OPEN_LOGIN:            () => openLogin(),
+    OPEN_LOGIN_HERE:       () => loginUrl(),
     GET_OAUTH_CLIENT_INFO: () => handleGetOAuthClientInfo(msg),
     OAUTH_INITIATE:        () => handleOAuthInitiate(msg),
     OAUTH_CALLBACK:        () => handleOAuthCallback(msg),
@@ -468,6 +470,13 @@ async function handleStatus() {
  *       URL (first run, or the origin not granted yet) it opens the popup page in a tab instead.
  * Test: manual (capture harness, auth error → Accedi di nuovo opens a tab).
  */
+/** The authorization URL for the saved server (the OAuth page's "Riprova" navigates to it). */
+async function loginUrl() {
+  const s = await getSettings();
+  if (!s.piiApiUrl) throw coded('Pseudora is not configured.', 'not_configured');
+  return handleOAuthInitiate({ url: s.piiApiUrl, clientId: s.piiOauthClientId });
+}
+
 async function openLogin() {
   const s = await getSettings();
   const granted = s.piiApiUrl && await chrome.permissions?.contains?.({ origins: [`${new URL(s.piiApiUrl).origin}/*`] }).catch(() => false);

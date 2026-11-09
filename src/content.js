@@ -49,6 +49,7 @@
     el.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
+
   const composer = globalThis.PseudoraComposer?.forHost(location.hostname);
   if (!composer) return;
   const site = {
@@ -56,12 +57,12 @@
     setText: writeComposer,
     getSendButton: () => composer.sendButton(document),
   };
+  const { t, docOptions, docLabel, entityLabel, describeError, toolbarStatus } = globalThis.PseudoraCore;
+  const UI = globalThis.PseudoraPanel;
+  const guard = globalThis.PseudoraSendGuard;
 
   /* ── State ──────────────────────────────────────────────────────────────────*/
-  let contextId         = null;
-  let originalText      = null;
-  let lastAnonResult    = null;   // { original, anonResult }
-  let mainPanel         = null;
+  let lastAnon          = null;   // { original, result, contextId, docType, mode }
   let activeTab         = 'anonymize';
   let toolbar           = null;
   let currentInput      = null;
@@ -70,25 +71,25 @@
   let interceptSend     = false;
   let isAnonymizing     = false;
   let nativeSendAllowed = false;  // true only during our own post-anonymize click
-  let storedContextType = 'generic';
-  let storedMode        = 'tag';
-  let selectedTeamCode  = '';
-  const guard           = globalThis.PseudoraSendGuard;
-  const EDITOR_WRITE_FAILED =
-    'Pseudora could not place the anonymized text in the editor. Nothing was sent.';
+  let docType           = globalThis.PseudoraCore.DEFAULT_DOC_TYPE;
+  let mode              = 'tag';
+  let status            = { configured: false, interceptSend: false, teamName: '', shortcuts: {} };
+  let docs              = { presets: [], policies: [] };
+  let lastRequest       = null;   // the last doAnonymize() options, for "Riprova"
+  let view              = null;   // the open text panel: { body, foot, alert, ... }
 
   function applySettings(s) {
-    if ('interceptSend' in s) interceptSend     = s.interceptSend;
-    if ('contextType' in s)   storedContextType = s.contextType || 'generic';
-    if ('mode' in s)          storedMode        = s.mode        || 'tag';
+    if ('interceptSend' in s) interceptSend = !!s.interceptSend;
+    if ('docType' in s && s.docType) docType = s.docType;
+    if ('mode' in s) mode = s.mode || 'tag';
   }
 
   try {
-    chrome.storage.sync.get({ interceptSend: false, contextType: 'generic', mode: 'tag' }, applySettings);
+    chrome.storage.sync.get({ interceptSend: false, docType, mode }, applySettings);
     // Without this, enabling interception in the popup left open tabs unprotected.
     chrome.storage.onChanged.addListener((changes, area) => {
-      if (area !== 'sync') return;
-      applySettings(Object.fromEntries(Object.entries(changes).map(([k, c]) => [k, c.newValue])));
+      if (area === 'sync') applySettings(Object.fromEntries(Object.entries(changes).map(([k, c]) => [k, c.newValue])));
+      refreshStatus();
     });
   } catch (_) {}
 
@@ -96,39 +97,85 @@
   function safeSend(msg) {
     return new Promise(resolve => {
       try {
-        if (!chrome.runtime?.id) { resolve({ error: 'Extension reloaded — refresh the page.' }); return; }
+        if (!chrome.runtime?.id) { resolve({ error: 'Extension reloaded', responseCode: 'reloaded' }); return; }
         chrome.runtime.sendMessage(msg, resp => {
-          if (chrome.runtime.lastError) { resolve({ error: chrome.runtime.lastError.message }); return; }
+          if (chrome.runtime.lastError) { resolve({ error: chrome.runtime.lastError.message, responseCode: 'reloaded' }); return; }
           resolve(resp);
         });
-      } catch (e) { resolve({ error: e.message }); }
+      } catch (e) { resolve({ error: e.message, responseCode: 'reloaded' }); }
     });
   }
 
-  /* ── Toolbar button ─────────────────────────────────────────────────────────*/
+  const currentDocLabel = () => docLabel(docOptions(docs, docType).groups, docType);
+  const modeLabel = m => t(m === 'surrogate' ? 'modeSurrogate' : 'modeTag');
+  const shortcut = name => status.shortcuts?.[name] || '';
+
+  /** <option> without the Option constructor (missing in some test DOMs). */
+  function option(label, value, selected) {
+    const o = document.createElement('option');
+    o.textContent = label; o.value = value; o.selected = !!selected;
+    return o;
+  }
+
+  /**
+   * Why: the page button and panel header must follow login, team, intercept and document
+   *      type changes made in the popup or another tab.
+   * What: refreshes status (GET_STATUS) and the document-type list, then repaints.
+   * Test: tests/composer.mjs, a status reply with interceptSend renders "Protetto · <team>".
+   */
+  let statusTimer = null;
+  function refreshStatus() {
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(async () => {
+      const [s, d] = await Promise.all([safeSend({ type: 'GET_STATUS' }), safeSend({ type: 'GET_DOC_TYPES' })]);
+      if (s && !s.error) { status = s; applySettings(s); }
+      if (d && !d.error) docs = d;
+      paintToolbar();
+      view?.setSubtitle(subtitle());
+    }, 30);
+  }
+
+  const subtitle = () => t('panelSubtitle', { doc: currentDocLabel(), mode: modeLabel(mode) });
+
+  /* ── Page button ────────────────────────────────────────────────────────────*/
   function createToolbar() {
     const bar = document.createElement('div');
-    bar.className = 'pii-toolbar';
+    bar.className = 'pii-ui pii-toolbar';
     bar.id = 'pii-protect-toolbar';
 
     const btn = document.createElement('button');
+    btn.type = 'button';
     btn.className = 'pii-shield-btn';
-    btn.title = 'Pseudora';
+    btn.setAttribute('aria-haspopup', 'dialog');
+    btn.setAttribute('aria-expanded', 'false');
 
     const img = document.createElement('img');
     img.src = chrome.runtime.getURL('icons/icon48.png');
-    img.width = 18; img.height = 18;
-    img.style.cssText = 'border-radius:4px;flex-shrink:0;display:block;';
-    btn.appendChild(img);
-
+    img.width = 18; img.height = 18; img.alt = '';
+    img.className = 'pii-shield-mark';
+    const dot = document.createElement('span');
+    dot.className = 'pii-shield-dot';
+    dot.setAttribute('aria-hidden', 'true');
     const lbl = document.createElement('span');
     lbl.className = 'pii-shield-label';
-    lbl.textContent = 'PII';
-    btn.appendChild(lbl);
+    btn.append(img, dot, lbl);
 
     btn.addEventListener('click', togglePanel);
     bar.appendChild(btn);
-    return { bar, btn };
+    return { bar, btn, lbl };
+  }
+
+  function paintToolbar() {
+    if (!toolbar) return;
+    const st = toolbarStatus({ ...status, interceptSend, docLabel: currentDocLabel() });
+    const busy = isAnonymizing;
+    toolbar.btn.dataset.state = busy ? 'busy' : st.state;
+    toolbar.lbl.textContent = busy ? t('toolbarBusy') : st.label;
+    const keys = shortcut('anonymize');
+    toolbar.btn.setAttribute('aria-label', busy ? t('toolbarBusy') : st.aria);
+    toolbar.btn.title = keys ? `${st.aria} (${keys})` : st.aria;
+    toolbar.btn.setAttribute('aria-expanded', String(UI.isOpen('text')));
+    positionToolbar();
   }
 
   /** display:contents wrappers have no box; measure the nearest ancestor that renders. */
@@ -145,7 +192,7 @@
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const bar = toolbar.bar.getBoundingClientRect();
-    const W = bar.width || 70, H = bar.height || 40;
+    const W = bar.width || 120, H = bar.height || 36;
     let left = rect.right + 10;
     let top = rect.top + rect.height / 2 - H / 2;
     // No room on the right (narrow window, sidebar open): sit above the pill's right end.
@@ -153,16 +200,18 @@
     top = Math.max(8, Math.min(top, window.innerHeight - H - 8));
     toolbar.bar.style.left = `${left}px`;
     toolbar.bar.style.top  = `${top}px`;
+    UI.reposition();
   }
 
   function injectToolbar() {
     if (toolbar?.bar.isConnected) return;
     document.getElementById('pii-protect-toolbar')?.remove();
-    const { bar, btn } = createToolbar();
-    toolbar = { bar, btn };
-    bar.style.position = 'fixed';
-    bar.style.zIndex   = '9998';
-    document.body.appendChild(bar);
+    toolbar = createToolbar();
+    toolbar.bar.style.position = 'fixed';
+    toolbar.bar.style.zIndex   = '2147483000';
+    document.body.appendChild(toolbar.bar);
+    UI.syncTheme();
+    paintToolbar();
     if (!posHandler) {
       posHandler = positionToolbar;
       window.addEventListener('scroll', posHandler, true);
@@ -170,513 +219,455 @@
     }
   }
 
-  /* ── Context types & modes ──────────────────────────────────────────────────*/
-  const CONTEXT_TYPES = [
-    { code: 'generic',     label: 'Generic (default)' },
-    { code: 'fine_appeal', label: 'Legal — Fine appeal' },
-    { code: 'contract',    label: 'Contract' },
-    { code: 'medical',     label: 'Medical' },
-    { code: 'embedding',   label: 'Embedding (RAG)' },
-  ];
-  const MODES = [
-    { code: 'tag',       label: 'Tag (reversible)' },
-    { code: 'surrogate', label: 'Surrogate (fakes)' },
-  ];
-
-  /* ── Main tabbed panel ──────────────────────────────────────────────────────*/
+  /* ── Panel ──────────────────────────────────────────────────────────────────*/
   function togglePanel() {
-    if (mainPanel) { mainPanel.remove(); mainPanel = null; return; }
-    buildMainPanel();
+    if (UI.close('text', 'dismissed')) { paintToolbar(); return; }
+    openPanel();
   }
 
-  function buildMainPanel() {
-    document.getElementById('pii-main-panel')?.remove();
-
-    const p = document.createElement('div');
-    p.id = 'pii-main-panel';
-    p.className = 'pii-panel';
-
-    // ── Header
-    const head = document.createElement('div');
-    head.className = 'pii-panel-head';
-    const titleEl = document.createElement('span');
-    titleEl.className = 'pii-panel-title';
-    const hImg = document.createElement('img');
-    hImg.src = chrome.runtime.getURL('icons/icon48.png');
-    hImg.width = 16; hImg.height = 16;
-    hImg.style.cssText = 'border-radius:3px;flex-shrink:0;';
-    titleEl.appendChild(hImg);
-    titleEl.appendChild(document.createTextNode(' Pseudora'));
-    const closeBtn = document.createElement('button');
-    closeBtn.className = 'pii-panel-close';
-    closeBtn.textContent = '✕';
-    closeBtn.addEventListener('click', () => { p.remove(); mainPanel = null; });
-    head.appendChild(titleEl); head.appendChild(closeBtn);
-    p.appendChild(head);
-
-    // ── Tabs
-    const tabBar = document.createElement('div');
-    tabBar.className = 'pii-tab-bar';
-    const tabAnon   = makeTab('Anonymize', 'anonymize', tabBar, p);
-    const tabResult = makeTab('Result',    'result',    tabBar, p);
-    p.appendChild(tabBar);
-
-    // ── Tab panes
-    const paneAnon   = buildAnonPane();
-    const paneResult = buildResultPane();
-    paneAnon.dataset.tab   = 'anonymize';
-    paneResult.dataset.tab = 'result';
-    p.appendChild(paneAnon);
-    p.appendChild(paneResult);
-
-    // Activate correct tab
-    function activateTab(name) {
-      activeTab = name;
-      [tabAnon, tabResult].forEach(t =>
-        t.classList.toggle('pii-tab-active', t.dataset.tab === name)
-      );
-      [paneAnon, paneResult].forEach(pane =>
-        pane.style.display = pane.dataset.tab === name ? '' : 'none'
-      );
-    }
-    tabAnon._activate   = () => activateTab('anonymize');
-    tabResult._activate = () => activateTab('result');
-    activateTab(activeTab);
-
-    // Expose pane updater on the panel element
-    p._showResult = (orig, res) => {
-      fillResultPane(paneResult, orig, res);
-      activateTab('result');
-    };
-    p._showError = (msg) => {
-      fillErrorPane(paneResult, msg);
-      activateTab('result');
-    };
-
-    document.body.appendChild(p);
-    mainPanel = p;
-  }
-
-  function makeTab(label, name, tabBar, panelEl) {
-    const t = document.createElement('button');
-    t.className = 'pii-tab';
-    t.textContent = label;
-    t.dataset.tab = name;
-    t.addEventListener('click', () => t._activate?.());
-    tabBar.appendChild(t);
-    return t;
-  }
-
-  /* ── Anonymize pane ─────────────────────────────────────────────────────────*/
-  function buildAnonPane() {
-    const pane = document.createElement('div');
-    pane.className = 'pii-pane';
-
-    // Team
-    const teamWrap = document.createElement('div');
-    teamWrap.className = 'pii-field';
-    teamWrap.style.display = 'none';
-    const teamLabel = document.createElement('label');
-    teamLabel.className = 'pii-field-label';
-    teamLabel.textContent = 'Team';
-    const teamSel = document.createElement('select');
-    teamSel.className = 'pii-select';
-    teamSel.id = 'pii-team';
-    teamWrap.appendChild(teamLabel); teamWrap.appendChild(teamSel);
-    pane.appendChild(teamWrap);
-
-    // Document type
-    const ctWrap = document.createElement('div');
-    ctWrap.className = 'pii-field';
-    const ctLabel = document.createElement('label');
-    ctLabel.className = 'pii-field-label';
-    ctLabel.textContent = 'Document type';
-    const ctSel = document.createElement('select');
-    ctSel.className = 'pii-select';
-    ctSel.id = 'pii-ctx-type';
-    CONTEXT_TYPES.forEach(({ code, label }) => {
-      const opt = document.createElement('option');
-      opt.value = code; opt.textContent = label;
-      if (code === storedContextType) opt.selected = true;
-      ctSel.appendChild(opt);
+  /**
+   * Why: text and images share one Pseudora panel (src/panel.js); this fills it for text.
+   * What: opens the shell with the "Anonimizza" and "Risultato" tabs, document type and mode.
+   * Test: tests/composer.mjs (dialog role, tabs, Esc returns focus to the page button).
+   */
+  function openPanel(tab = activeTab) {
+    const shell = UI.open({
+      owner: 'text', title: 'Pseudora', subtitle: subtitle(),
+      returnTo: toolbar?.btn,
+      onClose: () => { view = null; paintToolbar(); },
     });
-    ctWrap.appendChild(ctLabel); ctWrap.appendChild(ctSel);
-    pane.appendChild(ctWrap);
-    refreshContextTypeOptions(ctSel, storedContextType);
+    view = shell;
+    const tabs = document.createElement('div');
+    tabs.className = 'pii-tabs';
+    tabs.setAttribute('role', 'tablist');
+    const panes = {};
+    const tabBtns = {};
+    for (const name of ['anonymize', 'result']) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'pii-tab';
+      b.id = `pii-tab-${name}`;
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-controls', `pii-pane-${name}`);
+      b.textContent = t(name === 'anonymize' ? 'tabAnonymize' : 'tabResult');
+      b.addEventListener('click', () => activate(name));
+      b.addEventListener('keydown', e => {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        const next = name === 'anonymize' ? 'result' : 'anonymize';
+        activate(next); tabBtns[next].focus();
+      });
+      tabBtns[name] = b;
+      tabs.appendChild(b);
+      const pane = document.createElement('div');
+      pane.className = 'pii-pane';
+      pane.id = `pii-pane-${name}`;
+      pane.setAttribute('role', 'tabpanel');
+      pane.setAttribute('aria-labelledby', b.id);
+      panes[name] = pane;
+    }
+    shell.body.append(tabs, panes.anonymize, panes.result);
+    function activate(name) {
+      activeTab = name;
+      for (const n of Object.keys(panes)) {
+        const on = n === name;
+        tabBtns[n].setAttribute('aria-selected', String(on));
+        tabBtns[n].tabIndex = on ? 0 : -1;
+        panes[n].hidden = !on;
+      }
+      renderFoot(shell.foot, name);
+      UI.reposition();
+    }
+    shell.activate = activate;
+    shell.panes = panes;
+    buildAnonPane(panes.anonymize);
+    renderResult();
+    activate(tab);
+    paintToolbar();
+    return shell;
+  }
 
-    // Mode
+  function ensurePanel(tab) {
+    if (!view) openPanel(tab); else view.activate(tab);
+    return view;
+  }
+
+  function field(labelText, control, hint) {
+    const wrap = document.createElement('div');
+    wrap.className = 'pii-field';
+    const label = document.createElement('label');
+    label.className = 'pii-label';
+    label.textContent = labelText;
+    label.htmlFor = control.id;
+    wrap.append(label, control);
+    if (hint) {
+      const h = document.createElement('p');
+      h.className = 'pii-hint';
+      h.id = `${control.id}-hint`;
+      h.textContent = hint;
+      control.setAttribute('aria-describedby', h.id);
+      wrap.appendChild(h);
+    }
+    return wrap;
+  }
+
+  /** Shows "Salvato" next to a control for 2 s (role=status, so it is announced). */
+  function saved(node) {
+    let s = node.querySelector(':scope > .pii-saved');
+    if (!s) {
+      s = document.createElement('span');
+      s.className = 'pii-saved';
+      s.setAttribute('role', 'status');
+      node.querySelector('.pii-label')?.after(s);
+    }
+    s.textContent = t('saved');
+    clearTimeout(s._t);
+    s._t = setTimeout(() => { s.textContent = ''; }, 2000);
+  }
+
+  function buildAnonPane(pane) {
+    const state = document.createElement('p');
+    state.className = `pii-state${interceptSend ? ' is-on' : ''}`;
+    state.textContent = interceptSend ? t('paneInterceptOn') : t('paneInterceptOff');
+    pane.appendChild(state);
+
+    // Team (only when the account has more than one)
+    safeSend({ type: 'GET_TEAMS' }).then(resp => {
+      const teams = Array.isArray(resp?.teams) ? resp.teams : [];
+      if (teams.length < 2 || !pane.isConnected) return;
+      const sel = document.createElement('select');
+      sel.id = 'pii-team';
+      sel.className = 'pii-select';
+      const selected = resp.selectedTeamCode || teams[0].tenant_code || '';
+      teams.forEach(team => {
+        const opt = option(team.name || team.tenant_code || 'Team', team.tenant_code || '');
+        opt.selected = opt.value === selected;
+        sel.appendChild(opt);
+      });
+      const f = field(t('fieldTeam'), sel);
+      sel.addEventListener('change', async () => {
+        await safeSend({ type: 'SELECT_TEAM', teamCode: sel.value });
+        saved(f);
+        refreshStatus();
+      });
+      pane.insertBefore(f, state.nextSibling);
+    });
+
+    // Document type: the saved value is selected, never the select's stale value (1.2.x race).
+    const ct = document.createElement('select');
+    ct.id = 'pii-doc-type';
+    ct.className = 'pii-select';
+    const docField = field(t('fieldDocType'), ct, t('fieldDocTypeHint'));
+    const fill = () => {
+      const { groups, selected } = docOptions(docs, docType);
+      ct.replaceChildren(...groups.map(g => {
+        const og = document.createElement('optgroup');
+        og.label = g.label;
+        g.options.forEach(o => og.appendChild(option(o.label, o.value, o.value === selected)));
+        return og;
+      }));
+      ct.value = selected;
+    };
+    fill();
+    ct._refill = fill;
+    ct.addEventListener('change', () => {
+      docType = ct.value;
+      chrome.storage.sync.set({ docType });
+      saved(docField);
+      view?.setSubtitle(subtitle());
+      paintToolbar();
+    });
+    pane.appendChild(docField);
+    safeSend({ type: 'GET_DOC_TYPES' }).then(d => { if (d && !d.error) { docs = d; if (ct.isConnected) fill(); view?.setSubtitle(subtitle()); } });
+
+    // Mode: a two-option segmented control with a one-line consequence.
     const modeWrap = document.createElement('div');
     modeWrap.className = 'pii-field';
-    const modeLabel = document.createElement('label');
-    modeLabel.className = 'pii-field-label';
-    modeLabel.textContent = 'Mode';
-    const modeSel = document.createElement('select');
-    modeSel.className = 'pii-select';
-    modeSel.id = 'pii-mode';
-    MODES.forEach(({ code, label }) => {
-      const opt = document.createElement('option');
-      opt.value = code; opt.textContent = label;
-      if (code === storedMode) opt.selected = true;
-      modeSel.appendChild(opt);
-    });
-    modeWrap.appendChild(modeLabel); modeWrap.appendChild(modeSel);
+    const legend = document.createElement('span');
+    legend.className = 'pii-label';
+    legend.id = 'pii-mode-label';
+    legend.textContent = t('fieldMode');
+    const seg = document.createElement('div');
+    seg.className = 'pii-seg';
+    seg.setAttribute('role', 'radiogroup');
+    seg.setAttribute('aria-labelledby', legend.id);
+    const explain = document.createElement('p');
+    explain.className = 'pii-hint';
+    const paintMode = () => {
+      seg.querySelectorAll('button').forEach(b => {
+        const on = b.dataset.mode === mode;
+        b.setAttribute('aria-checked', String(on));
+        b.tabIndex = on ? 0 : -1;
+      });
+      explain.textContent = t(mode === 'surrogate' ? 'modeSurrogateHint' : 'modeTagHint');
+    };
+    for (const m of ['tag', 'surrogate']) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.dataset.mode = m;
+      b.setAttribute('role', 'radio');
+      b.textContent = modeLabel(m);
+      b.addEventListener('click', () => {
+        mode = m;
+        chrome.storage.sync.set({ mode });
+        paintMode();
+        saved(modeWrap);
+        view?.setSubtitle(subtitle());
+      });
+      b.addEventListener('keydown', e => {
+        if (!['ArrowRight', 'ArrowLeft'].includes(e.key)) return;
+        const other = seg.querySelector(`[data-mode="${m === 'tag' ? 'surrogate' : 'tag'}"]`);
+        other.click(); other.focus();
+      });
+      seg.appendChild(b);
+    }
+    modeWrap.append(legend, seg, explain);
+    paintMode();
     pane.appendChild(modeWrap);
-    hydrateTeamSelect(teamWrap, teamSel, ctSel);
-
-    ctSel.addEventListener('change', () => {
-      storedContextType = ctSel.value || 'generic';
-      chrome.storage.sync.set({ contextType: storedContextType });
-    });
-    modeSel.addEventListener('change', () => {
-      storedMode = modeSel.value || 'tag';
-      chrome.storage.sync.set({ mode: storedMode });
-    });
-
-    // Buttons
-    const foot = document.createElement('div');
-    foot.className = 'pii-pane-foot';
-
-    const anonBtn = document.createElement('button');
-    anonBtn.className = 'pii-btn pii-btn-outline pii-anon-action';
-    anonBtn.textContent = 'Anonymize';
-    anonBtn.addEventListener('click', () => {
-      doAnonymize({ thenSend: false, contextType: ctSel.value, mode: modeSel.value, triggerButton: anonBtn });
-    });
-
-    const sendBtn = document.createElement('button');
-    sendBtn.className = 'pii-btn pii-anon-action';
-    sendBtn.innerHTML = 'Anonymize &amp; Send ➜';
-    sendBtn.addEventListener('click', () => {
-      doAnonymize({ thenSend: true, contextType: ctSel.value, mode: modeSel.value, triggerButton: sendBtn });
-    });
-
-    foot.appendChild(anonBtn);
-    foot.appendChild(sendBtn);
-    pane.appendChild(foot);
-    return pane;
   }
 
-  async function hydrateTeamSelect(teamWrap, teamSel, contextSelect) {
-    const resp = await safeSend({ type: 'GET_TEAMS' });
-    const teams = Array.isArray(resp?.teams) ? resp.teams : [];
-    if (teams.length === 0) {
-      teamWrap.style.display = 'none';
+  function renderFoot(foot, tab) {
+    foot.replaceChildren();
+    const row = document.createElement('div');
+    row.className = 'pii-actions';
+    foot.appendChild(row);
+    if (tab === 'anonymize') {
+      const anon = UI.button(t('actionAnonymize'), '', () => doAnonymize({ thenSend: false, triggerButton: anon }));
+      anon.classList.add('pii-anon-action');
+      const send = UI.button(t('actionAnonymizeSend'), 'secondary', () => doAnonymize({ thenSend: true, triggerButton: send }));
+      send.classList.add('pii-anon-action');
+      row.append(anon, send);
+      if (isAnonymizing) setAnonymizeLoading(true);
+    } else if (lastAnon) {
+      const copy = UI.button(t('actionCopyProtected'), '', () => copyText(copy, lastAnon.result.anonymized_text, t('actionCopyProtected')));
+      const restore = UI.button(t('actionRestore'), 'caution', handleRestore);
+      restore.title = t('actionRestoreHint');
+      restore.setAttribute('aria-describedby', 'pii-restore-hint');
+      const hint = document.createElement('p');
+      hint.className = 'pii-hint pii-restore-hint';
+      hint.id = 'pii-restore-hint';
+      hint.textContent = t('actionRestoreHint');
+      row.append(copy, restore);
+      foot.append(hint, buildFeedbackBox());
+    }
+    const keys = [['anonymize', 'shortcutAnonymize'], ['restore', 'shortcutRestore']]
+      .filter(([name]) => shortcut(name)).map(([name, key]) => t(key, { keys: shortcut(name) }));
+    if (keys.length) {
+      const k = document.createElement('p');
+      k.className = 'pii-keys';
+      k.textContent = keys.join(' · ');
+      foot.appendChild(k);
+    }
+  }
+
+  /* ── Result ─────────────────────────────────────────────────────────────────*/
+  function renderResult(message) {
+    const pane = view?.panes.result;
+    if (!pane) return;
+    pane.replaceChildren();
+    if (!lastAnon) {
+      const empty = document.createElement('p');
+      empty.className = 'pii-empty';
+      empty.textContent = message || t('resultEmpty');
+      pane.appendChild(empty);
       return;
     }
+    const { original, result } = lastAnon;
+    const entities = Array.isArray(result.entities) ? result.entities : [];
+    const surrogate = (result.mode || lastAnon.mode) === 'surrogate';
 
-    selectedTeamCode = resp.selectedTeamCode || teams[0].tenant_code || '';
-    teamSel.innerHTML = '';
-    teams.forEach(team => {
-      const opt = document.createElement('option');
-      opt.value = team.tenant_code || '';
-      opt.textContent = team.name || team.tenant_code || 'Team';
-      opt.selected = opt.value === selectedTeamCode;
-      teamSel.appendChild(opt);
-    });
+    const summary = document.createElement('p');
+    summary.className = 'pii-summary';
+    summary.textContent = entities.length
+      ? t(entities.length === 1 ? 'resultSummaryOne' : 'resultSummaryMany', { n: entities.length })
+      : t('resultSummaryNone');
+    pane.appendChild(summary);
 
-    teamSel.disabled = teams.length === 1;
-    teamWrap.style.display = '';
-
-    if (!resp.selectedTeamCode && selectedTeamCode) {
-      await safeSend({ type: 'SELECT_TEAM', teamCode: selectedTeamCode });
-    }
-
-    teamSel.addEventListener('change', async () => {
-      selectedTeamCode = teamSel.value;
-      await safeSend({ type: 'SELECT_TEAM', teamCode: selectedTeamCode });
-      await refreshContextTypeOptions(contextSelect, contextSelect.value || storedContextType);
-    });
-
-    await refreshContextTypeOptions(contextSelect, contextSelect.value || storedContextType);
-  }
-
-  async function refreshContextTypeOptions(select, selectedValue = 'generic') {
-    const [ctResp, dpResp] = await Promise.all([
-      safeSend({ type: 'GET_CONTEXT_TYPES' }),
-      safeSend({ type: 'GET_DOMAIN_POLICIES' }),
-    ]);
-    console.log('[Pseudora] context-types response:', ctResp);
-    console.log('[Pseudora] domain-policies response:', dpResp);
-
-    const current = selectedValue || select.value || 'generic';
-
-    const contextTypes = Array.isArray(ctResp) ? ctResp : [];
-    const builtinCodes = new Set(CONTEXT_TYPES.map(item => item.code));
-    const extras = contextTypes
-      .filter(item => item?.code && !builtinCodes.has(item.code))
-      .map(item => ({ value: item.code, label: item.name || item.display_name || item.code }));
-    const ctxOptions = [...CONTEXT_TYPES.map(c => ({ value: c.code, label: c.label })), ...extras];
-
-    const policies = Array.isArray(dpResp) ? dpResp : [];
-    const domainOptions = policies
-      .filter(p => p?.domain)
-      .map(p => ({ value: `domain:${p.domain}`, label: `${p.display_name || p.domain} (${p.default_mode || 'tag'})` }));
-
-    select.innerHTML = '';
-
-    const addGroup = (label, options) => {
-      if (options.length === 0) return;
-      const group = document.createElement('optgroup');
-      group.label = label;
-      options.forEach(({ value, label }) => {
-        const opt = document.createElement('option');
-        opt.value = value;
-        opt.textContent = label;
-        opt.selected = value === current;
-        group.appendChild(opt);
-      });
-      select.appendChild(group);
-    };
-
-    addGroup('Tipi di contesto', ctxOptions);
-    addGroup('Policy di dominio', domainOptions);
-  }
-
-  /* ── Result pane ────────────────────────────────────────────────────────────*/
-  function buildResultPane() {
-    const pane = document.createElement('div');
-    pane.className = 'pii-pane pii-result-pane';
-    renderEmptyResult(pane);
-    return pane;
-  }
-
-  function renderEmptyResult(pane) {
-    pane.innerHTML = '';
-    const empty = document.createElement('div');
-    empty.className = 'pii-empty';
-    empty.textContent = 'No result yet. Use the Anonymize tab to get started.';
-    pane.appendChild(empty);
-  }
-
-  function fillResultPane(pane, original, anonResult) {
-    pane.innerHTML = '';
-    const { anonymized_text, entities = [] } = anonResult;
-
-    // Two-column comparison
-    const cols = document.createElement('div');
-    cols.className = 'pii-panel-cols';
-
-    const origCol = document.createElement('div'); origCol.className = 'pii-panel-col';
-    const origLbl = buildColumnHeader('Original', original);
-    const origBody = document.createElement('div'); origBody.className = 'pii-col-body pii-col-original'; origBody.textContent = original;
-    origCol.appendChild(origLbl); origCol.appendChild(origBody);
-
-    const anonCol = document.createElement('div'); anonCol.className = 'pii-panel-col';
-    const anonLbl = buildColumnHeader('Anonymized', anonymized_text);
-    const anonBody = document.createElement('div'); anonBody.className = 'pii-col-body pii-col-anon';
-    anonBody.innerHTML = highlightTokens(escHtml(anonymized_text));
-    anonCol.appendChild(anonLbl); anonCol.appendChild(anonBody);
-
-    cols.appendChild(origCol); cols.appendChild(anonCol);
-    pane.appendChild(cols);
-
-    // Entity list
-    if (entities.length > 0) {
-      const list = document.createElement('div');
-      list.className = 'pii-entity-list';
-      entities.forEach(e => {
-        const row = document.createElement('div'); row.className = 'pii-entity-row';
-        const tok = document.createElement('span'); tok.className = 'pii-entity-token'; tok.textContent = e.replacement || e.token || '';
-        const typ = document.createElement('span'); typ.className = 'pii-entity-type'; typ.textContent = e.type || '';
-        row.appendChild(tok);
-        const origVal = e.original_value || e.original || null;
-        if (origVal) {
-          const arr  = document.createElement('span'); arr.className = 'pii-entity-arrow'; arr.textContent = '→';
-          const orig = document.createElement('span'); orig.className = 'pii-entity-orig'; orig.textContent = origVal;
-          row.appendChild(arr); row.appendChild(orig);
+    if (entities.length) {
+      const table = document.createElement('table');
+      table.className = 'pii-map';
+      const cap = document.createElement('caption');
+      cap.textContent = t('resultMapCaption');
+      const head = document.createElement('thead');
+      head.innerHTML = '<tr><th scope="col"></th><th scope="col"></th><th scope="col"></th></tr>';
+      const ths = head.querySelectorAll('th');
+      ths[0].textContent = t('resultColSent'); ths[1].textContent = t('resultColOriginal'); ths[2].textContent = t('resultColType');
+      const tbody = document.createElement('tbody');
+      for (const e of entities) {
+        const tr = document.createElement('tr');
+        const tok = document.createElement('td');
+        const chip = document.createElement('span');
+        chip.className = `pii-chip ${surrogate ? 'is-surrogate' : 'is-tag'}`;
+        chip.textContent = e.replacement || e.token || '';
+        tok.appendChild(chip);
+        const orig = document.createElement('td');
+        const value = e.original_value || e.original || e.value || '';
+        if (value) {
+          const o = document.createElement('span');
+          o.className = 'pii-chip is-original';
+          o.textContent = value;
+          orig.appendChild(o);
+        } else {
+          orig.className = 'pii-cell-muted';
+          orig.textContent = t('resultValueHidden');
         }
-        row.appendChild(typ);
-        list.appendChild(row);
-      });
-      pane.appendChild(list);
+        const typ = document.createElement('td');
+        typ.className = 'pii-cell-type';
+        typ.textContent = entityLabel(e.type);
+        tr.append(tok, orig, typ);
+        tbody.appendChild(tr);
+      }
+      table.append(cap, head, tbody);
+      const scroll = document.createElement('div');
+      scroll.className = 'pii-map-wrap';
+      scroll.appendChild(table);
+      pane.appendChild(scroll);
     }
 
-    pane.appendChild(buildFeedbackBox());
+    const sentLabel = document.createElement('p');
+    sentLabel.className = 'pii-label';
+    sentLabel.textContent = t('resultProtectedText');
+    const sent = document.createElement('div');
+    sent.className = 'pii-textbox';
+    sent.tabIndex = 0;
+    sent.setAttribute('aria-label', t('resultProtectedText'));
+    highlightTokens(sent, result.anonymized_text, surrogate ? [] : entities);
+    pane.append(sentLabel, sent);
 
-    // Footer
-    const foot = document.createElement('div');
-    foot.className = 'pii-pane-foot';
-
-    const restoreBtn = document.createElement('button');
-    restoreBtn.className = 'pii-btn pii-btn-restore';
-    restoreBtn.textContent = '🔓 Restore';
-    restoreBtn.addEventListener('click', handleRestore);
-    foot.appendChild(restoreBtn);
-
-    const copyBtn = document.createElement('button');
-    copyBtn.className = 'pii-btn pii-btn-outline';
-    copyBtn.textContent = 'Copy anonymized';
-    copyBtn.addEventListener('click', () => copyText(copyBtn, anonymized_text, 'Copy anonymized'));
-    foot.appendChild(copyBtn);
-    pane.appendChild(foot);
+    const det = document.createElement('details');
+    det.className = 'pii-original';
+    const sum = document.createElement('summary');
+    sum.textContent = t('resultOriginalText');
+    const origBox = document.createElement('div');
+    origBox.className = 'pii-textbox is-original';
+    origBox.textContent = original;
+    const copyOrig = UI.button(t('actionCopyOriginal'), 'quiet', () => copyText(copyOrig, original, t('actionCopyOriginal')));
+    det.append(sum, origBox, copyOrig);
+    pane.appendChild(det);
   }
 
-  function buildColumnHeader(label, textToCopy) {
-    const header = document.createElement('div');
-    header.className = 'pii-col-label';
-
-    const text = document.createElement('span');
-    text.textContent = label;
-
-    const copyBtn = document.createElement('button');
-    copyBtn.type = 'button';
-    copyBtn.className = 'pii-copy-mini';
-    copyBtn.textContent = 'Copy';
-    copyBtn.title = `Copy ${label.toLowerCase()} text`;
-    copyBtn.addEventListener('click', () => copyText(copyBtn, textToCopy, 'Copy'));
-
-    header.appendChild(text);
-    header.appendChild(copyBtn);
-    return header;
-  }
-
-  function copyText(button, text, defaultLabel) {
-    navigator.clipboard.writeText(text).then(() => {
-      button.textContent = 'Copied';
-      button.disabled = true;
-      setTimeout(() => {
-        button.textContent = defaultLabel;
-        button.disabled = false;
-      }, 1600);
+  /** Tag tokens ([PERSON_1]) as chips, built with text nodes only (no innerHTML). */
+  function highlightTokens(node, text, entities) {
+    const tokens = new Set(entities.map(e => e.replacement || e.token).filter(Boolean));
+    const re = /(\[[A-Z_]+_\d+\])/g;
+    String(text || '').split(re).forEach(part => {
+      if (re.test(part) || tokens.has(part)) {
+        const c = document.createElement('span');
+        c.className = 'pii-chip is-tag';
+        c.textContent = part;
+        node.appendChild(c);
+      } else if (part) node.appendChild(document.createTextNode(part));
+      re.lastIndex = 0;
     });
+  }
+
+  function copyText(button, text, label) {
+    navigator.clipboard.writeText(text).then(() => {
+      button.textContent = t('copied');
+      setTimeout(() => { button.textContent = label; }, 1600);
+    }).catch(() => { button.textContent = t('copyFailed'); setTimeout(() => { button.textContent = label; }, 2400); });
   }
 
   function buildFeedbackBox() {
     const box = document.createElement('div');
-    box.className = 'pii-feedback-box';
-
+    box.className = 'pii-feedback';
     const label = document.createElement('span');
     label.className = 'pii-feedback-label';
-    label.textContent = 'Was this anonymization useful?';
-
-    const yesBtn = document.createElement('button');
-    yesBtn.type = 'button';
-    yesBtn.className = 'pii-feedback-btn';
-    yesBtn.textContent = 'Yes';
-    yesBtn.addEventListener('click', () => submitInlineFeedback(box, true));
-
-    const noBtn = document.createElement('button');
-    noBtn.type = 'button';
-    noBtn.className = 'pii-feedback-btn';
-    noBtn.textContent = 'No';
-    noBtn.addEventListener('click', () => submitInlineFeedback(box, false));
-
-    box.appendChild(label);
-    box.appendChild(yesBtn);
-    box.appendChild(noBtn);
+    label.textContent = t('feedbackQuestion');
+    const yes = UI.button(t('feedbackYes'), 'quiet', () => submitInlineFeedback(box, true));
+    const no = UI.button(t('feedbackNo'), 'quiet', () => submitInlineFeedback(box, false));
+    box.append(label, yes, no);
     return box;
   }
 
   async function submitInlineFeedback(box, positive) {
-    box.querySelectorAll('button').forEach(button => { button.disabled = true; });
+    box.querySelectorAll('button').forEach(b => { b.disabled = true; });
     const resp = await safeSend({ type: 'SUBMIT_FEEDBACK', positive });
-    box.classList.add(positive ? 'pii-feedback-positive' : 'pii-feedback-negative');
-    box.innerHTML = resp?.ok
-      ? '<span class="pii-feedback-label">Thanks for the feedback.</span>'
-      : '<span class="pii-feedback-label">Could not save feedback.</span>';
+    const label = document.createElement('span');
+    label.className = 'pii-feedback-label';
+    label.setAttribute('role', 'status');
+    label.textContent = resp?.ok ? t('feedbackThanks') : t('feedbackFailed');
+    box.replaceChildren(label);
   }
 
-  function fillErrorPane(pane, msg) {
-    pane.innerHTML = '';
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'padding:14px 16px;font-size:13px;color:#374151;line-height:1.55;';
-    const strong = document.createElement('strong'); strong.style.color = '#dc2626'; strong.textContent = msg;
-    wrap.appendChild(strong);
-    const hint = document.createElement('p'); hint.style.marginTop = '8px;';
-    hint.textContent = 'Open the extension popup → Settings to configure API URL and login.';
-    wrap.appendChild(hint);
-    pane.appendChild(wrap);
-  }
-
-  function escHtml(str) {
-    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  }
-  function highlightTokens(str) {
-    return str.replace(/(\[[A-Z_]+_\d+\])/g, '<span class="pii-token-chip">$1</span>');
-  }
-
-  function setLoadingLabel(button, label) {
-    button.innerHTML = `<span class="pii-spinner" aria-hidden="true"></span><span>${label}</span>`;
-  }
-
-  function setAnonymizeLoading(loading, { thenSend = false, triggerButton = null } = {}) {
-    if (toolbar?.btn) {
-      toolbar.btn.disabled = loading;
-      toolbar.btn.classList.toggle('pii-is-loading', loading);
-    }
-
-    const panel = mainPanel || document.getElementById('pii-main-panel');
-    if (!panel) return;
-
-    panel.querySelectorAll('.pii-anon-action').forEach(button => {
-      if (!button.dataset.defaultHtml) button.dataset.defaultHtml = button.innerHTML;
-      button.disabled = loading;
-      button.classList.toggle('pii-is-loading', loading && button === triggerButton);
-
-      if (!loading) {
-        button.innerHTML = button.dataset.defaultHtml;
-      }
-    });
-
-    panel.querySelectorAll('#pii-team, #pii-ctx-type, #pii-mode').forEach(control => {
-      control.disabled = loading;
-    });
-
-    if (loading && triggerButton) {
-      setLoadingLabel(triggerButton, thenSend ? 'Anonymizing & sending...' : 'Anonymizing...');
-    }
-  }
-
+  /* ── Errors ─────────────────────────────────────────────────────────────────*/
   /**
-   * Why: an intercepted Enter that fails to anonymize is swallowed; without the panel
-   *      the user only sees that Enter "did nothing".
-   * What: opens the Pseudora panel if it is closed and shows `msg` in the Result tab.
-   * Test: tests/composer.mjs, a failing intercepted send opens the panel with the error.
+   * Why: an intercepted Enter that fails is swallowed; without the panel the user only sees
+   *      that Enter "did nothing", and each failure needs its own recovery.
+   * What: opens the panel if closed and renders the typed error (core.describeError) in its
+   *       role=alert region, with [Riprova] or [Accedi di nuovo] when that is the way out.
+   * Test: tests/composer.mjs, a blocked intercepted send opens the panel with the policy notice.
    */
-  function showError(msg) {
-    if (!mainPanel) buildMainPanel();
-    mainPanel._showError(msg);
+  function showError(resp) {
+    const shell = ensurePanel(activeTab);
+    const err = describeError(resp);
+    const box = document.createElement('div');
+    box.className = `pii-notice is-${err.tone}`;
+    box.dataset.kind = err.kind;
+    const title = document.createElement('p');
+    title.className = 'pii-notice-title';
+    title.textContent = err.title;
+    const detail = document.createElement('p');
+    detail.className = 'pii-notice-detail';
+    detail.textContent = err.detail;
+    box.append(title, detail);
+    if (err.action) {
+      const act = UI.button(t(err.action === 'retry' ? 'actionRetry' : 'actionLogin'), 'secondary', () => {
+        shell.alert.replaceChildren();
+        if (err.action === 'retry') doAnonymize(lastRequest || {});
+        else safeSend({ type: 'OPEN_LOGIN' });
+      });
+      box.appendChild(act);
+    }
+    shell.alert.replaceChildren(box);
+    UI.reposition();
+  }
+
+  function clearError() { view?.alert.replaceChildren(); }
+
+  function setAnonymizeLoading(loading, triggerButton = null) {
+    paintToolbar();
+    const panel = document.getElementById('pii-main-panel');
+    if (!panel) return;
+    panel.querySelectorAll('.pii-anon-action').forEach(button => {
+      if (!button.dataset.label) button.dataset.label = button.textContent;
+      button.disabled = loading;
+      button.setAttribute('aria-busy', String(loading && button === triggerButton));
+      if (loading && button === triggerButton) {
+        button.innerHTML = '<span class="pii-spinner" aria-hidden="true"></span>';
+        button.appendChild(document.createTextNode(t('toolbarBusy')));
+      } else if (!loading) button.textContent = button.dataset.label;
+    });
+    panel.querySelectorAll('#pii-team, #pii-doc-type, .pii-seg button').forEach(c => { c.disabled = loading; });
   }
 
   /* ── Core anonymize ─────────────────────────────────────────────────────────*/
-  async function doAnonymize({ thenSend = false, contextType, mode, triggerButton = null } = {}) {
+  async function doAnonymize({ thenSend = false, triggerButton = null } = {}) {
     if (!currentInput || isAnonymizing) return;
     const text = site.getText(currentInput);
-    if (!text.trim()) return;
-
-    const ct = contextType || storedContextType || 'generic';
-    const md = mode        || storedMode        || 'tag';
-
-    originalText = text;
-    contextId = contextId || crypto.randomUUID();
+    if (!text.trim()) {
+      ensurePanel('anonymize');
+      view.alert.replaceChildren(Object.assign(document.createElement('p'), { className: 'pii-notice is-info', textContent: t('emptyComposer') }));
+      return;
+    }
+    lastRequest = { thenSend };
+    const used = { docType, mode };
+    const contextId = lastAnon?.contextId || crypto.randomUUID();
     isAnonymizing = true;
-    setAnonymizeLoading(true, { thenSend, triggerButton });
+    clearError();
+    setAnonymizeLoading(true, triggerButton);
 
     try {
-      const resp = await safeSend({ type: 'ANONYMIZE', text, contextId, contextType: ct, mode: md });
-
-      if (resp?.error) {
-        const code = resp.responseCode || '';
-        // Blocked PII: the message is already user-facing and clear — show as-is.
-        // Auth/config problems: append the settings hint.
-        const isAuth = !code && (resp.error.includes('403') || resp.error.includes('401') || resp.error.includes('configured'));
-        showError(isAuth ? resp.error + '\nOpen the extension popup → Settings.' : resp.error);
-        return;
-      }
-
+      const resp = await safeSend({ type: 'ANONYMIZE', text, contextId, ...used });
+      if (resp?.error) { showError(resp); return; }
       if (resp?.safe !== true || typeof resp.anonymized_text !== 'string') {
-        showError('Pseudora could not confirm safe processing. Nothing was sent.');
+        showError({ responseCode: 'unsafe' });
         return;
       }
       site.setText(currentInput, resp.anonymized_text);
-      lastAnonResult = { original: originalText, anonResult: resp };
-
-      if (mainPanel) {
-        mainPanel._showResult(originalText, resp);
-      } else {
-        activeTab = 'result';
-        buildMainPanel();
-      }
+      lastAnon = { original: text, result: resp, contextId, ...used };
+      ensurePanel('result');
+      renderResult();
+      view.activate('result');
 
       if (thenSend) {
         const sendBtn = site.getSendButton?.();
@@ -684,7 +675,7 @@
           setTimeout(() => {
             // The site may have re-rendered the editor since; re-check right before sending.
             if (!guard.composerHolds(site.getText(currentInput), resp.anonymized_text)) {
-              showError(EDITOR_WRITE_FAILED);
+              showError({ responseCode: 'editor_write_failed' });
               return;
             }
             nativeSendAllowed = true;
@@ -695,31 +686,39 @@
     } finally {
       const releaseDelay = thenSend ? 550 : 0;
       setTimeout(() => {
-        setAnonymizeLoading(false);
         isAnonymizing = false;
+        setAnonymizeLoading(false);
       }, releaseDelay);
     }
   }
 
   async function handleRestore() {
-    if (!currentInput || !contextId) return;
-    const text = site.getText(currentInput);
-    const resp = await safeSend({ type: 'DEANONYMIZE', text, contextId });
-    if (resp?.error) return;
-    site.setText(currentInput, resp.restored_text);
-    contextId = null; originalText = null; lastAnonResult = null;
-    if (mainPanel) {
-      const resultPane = mainPanel.querySelector('.pii-result-pane');
-      if (resultPane) renderEmptyResult(resultPane);
-      activeTab = 'anonymize';
-      mainPanel.querySelectorAll('.pii-tab').forEach(t =>
-        t.classList.toggle('pii-tab-active', t.dataset.tab === 'anonymize')
-      );
-      mainPanel.querySelectorAll('.pii-pane').forEach(pane =>
-        pane.style.display = pane.dataset.tab === 'anonymize' ? '' : 'none'
-      );
+    if (!currentInput || !lastAnon) {
+      ensurePanel('result');
+      renderResult(t('restoreNothing'));
+      return;
     }
+    const text = site.getText(currentInput);
+    const resp = await safeSend({ type: 'DEANONYMIZE', text, contextId: lastAnon.contextId, docType: lastAnon.docType });
+    if (resp?.error || typeof resp?.restored_text !== 'string') { showError(resp?.error ? resp : { responseCode: 'failed' }); return; }
+    site.setText(currentInput, resp.restored_text);
+    lastAnon = null;
+    if (view) { renderResult(t('restoreDone')); view.activate('result'); }
   }
+
+  /* ── Keyboard shortcuts (manifest commands, forwarded by the service worker) ─*/
+  try {
+    chrome.runtime.onMessage?.addListener((msg, sender) => {
+      if (sender?.id !== chrome.runtime.id || msg?.type !== 'PSEUDORA_COMMAND') return false;
+      if (msg.command === 'anonymize') {
+        const text = currentInput ? site.getText(currentInput) : '';
+        // New text in the composer → protect it; already protected (or empty) → show the panel.
+        if (text.trim() && !guard.composerHolds(text, lastAnon?.result.anonymized_text)) doAnonymize({});
+        else togglePanel();
+      } else if (msg.command === 'restore') handleRestore();
+      return false;
+    });
+  } catch (_) {}
 
   /* ── Intercept ──────────────────────────────────────────────────────────────*/
   // A send attempt while anonymization is in flight is swallowed, not passed
@@ -772,4 +771,5 @@
 
   setupInterceptors();
   syncComposer();
+  refreshStatus();
 })();
