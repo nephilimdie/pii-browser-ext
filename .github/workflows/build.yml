@@ -31,6 +31,14 @@ jobs:
         run: node tests/composer.mjs
       - name: Protected screenshot (crop math, routing, fail closed, activeTab start)
         run: node tests/screenshot.mjs
+      - name: Shared logic (document type, migration, error kinds, page-button status)
+        run: node tests/core.mjs
+      - name: Italian and English messages complete
+        run: node tests/i18n.mjs
+      - name: Popup saves on change, keeps the saved document type, folds self-hosted settings
+        run: node tests/popup.mjs
+      - name: One panel, never over the page button, Esc and focus return
+        run: node tests/panel.mjs
 
   build:
     runs-on: ubuntu-latest
@@ -84,7 +92,7 @@ jobs:
         run: |
           zip -r "${{ steps.meta.outputs.zip }}" . \
             -x '.git/*' '.github/*' '.gitignore' '*/.DS_Store' '.DS_Store' '*.pem' '*.crx' '*.zip' \
-               'node_modules/*' 'package.json' 'package-lock.json' 'tsconfig.json' 'openapi/*' 'src/generated/*' 'tests/*' 'TESTING.md' 'CHANGELOG.md'
+               'node_modules/*' 'package.json' 'package-lock.json' 'tsconfig.json' 'openapi/*' 'src/generated/*' 'tests/*' 'TESTING.md' 'CHANGELOG.md' '.impeccable/*' '.claude-mpm/*'
           unzip -l "${{ steps.meta.outputs.zip }}"
 
       - uses: actions/upload-artifact@v4

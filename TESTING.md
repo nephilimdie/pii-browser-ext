@@ -8,7 +8,7 @@ production API key in a development browser profile.
 1. Load the unpacked extension in Chrome and Firefox.
 2. Configure the API URL and complete OAuth PKCE login.
 3. Confirm the extension reports the account and available teams.
-4. Select each team and confirm that context types and modes reload.
+4. Select each team and confirm that the document types (team policies) reload.
 5. Inspect extension storage: access and refresh tokens, API keys, PKCE state
    and verifier must be in `storage.local`; preferences may be in
    `storage.sync`, but no credential may be there.
@@ -25,7 +25,7 @@ Repeat the workflow on ChatGPT, Claude and Gemini:
 3. Restore the response using the same context.
 4. Repeat with `surrogate` and verify the response is coherent but does not
    expose the original values.
-5. Verify `Anonymize & Send` shows a loading state and sends only after the
+5. Verify `Anonimizza e invia` shows a loading state and sends only after the
    anonymization request succeeds.
 6. With interception on, press Enter twice quickly: only anonymized text may
    reach the provider, and the second press must not send the original.
@@ -73,3 +73,16 @@ Prerequisiti: account Pseudora con crediti, Chrome desktop, una pagina con dati 
 11. Intercetta invio attivo, credenziali errate: premi Invio con del testo → il pannello Pseudora si apre con l'errore, nulla viene inviato.
 
 Automatico: `node tests/screenshot.mjs` (calcolo del ritaglio con devicePixelRatio, scelta allega/appunti, fail-closed, avvio activeTab). L'e2e Playwright con Cloud simulato copre i passi 4, 6, 7 (fixture locale e chatgpt.com senza login) e 9; la scorciatoia reale (passo 3-4) va verificata a mano perché Playwright non può premere le scorciatoie del browser.
+
+## Interfaccia 1.3.0 — guida di test manuale
+
+1. Aggiornamento da 1.2.x con una policy di team salvata: il popup e il pannello mostrano ancora quella policy in "Tipo documento" (non "Generico"); "Auto-send" non esiste più.
+2. Popup: cambia ogni controllo e chiudi il popup senza premere nulla; riaprilo: tutto è rimasto. Accanto al controllo compare "Salvato".
+3. Primo avvio (profilo pulito): il popup mostra "Accedi con Pseudora"; l'indirizzo pseudora.cloud è già impostato; i campi self-hosted sono sotto "Account → Avanzate". "Reimposta accesso e cache…" chiede conferma.
+4. Pulsante nella pagina: "Protetto · <team>" con "Proteggi l'invio" attivo, "Pseudora · invio libero" se spento, "Pseudora · accedi" da disconnessi; cambia senza ricaricare la pagina.
+5. Errori nel pannello (con un Cloud di prova): blocco di policy (riquadro ambra con il dato bloccato, nessun "Riprova"), 500/timeout ("Riprova" ripete l'anonimizzazione), 401 ("Accedi di nuovo" apre il login). Nessun "HTTP 500" grezzo.
+6. Tastiera: Alt+Shift+A anonimizza o apre il pannello, Alt+Shift+R ripristina; Esc chiude il pannello e il focus torna al pulsante; frecce sulle schede; nella selezione dello screenshot Invio cattura tutta l'area visibile.
+7. Immagine incollata: anteprima a tutta larghezza, clic per ingrandire, aree incerte contornate; il pannello immagini e quello del testo sono lo stesso pannello e non coprono il pulsante, anche in una finestra di 420 px; tema scuro uguale per entrambi.
+8. Lingua: con Chrome in inglese l'interfaccia è in inglese; in italiano tutto è in italiano, comprese le etichette dei dati ("Codice fiscale").
+
+Automatico: `npm test` (core, i18n, popup, panel, composer, image-guard, screenshot e i test del service worker).

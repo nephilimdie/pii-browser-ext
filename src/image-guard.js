@@ -14,35 +14,11 @@
   const HEIC = /^image\/hei[cf]|\.(heic|heif)$/i;
   const MAX_IMAGES = 4;
   const MAX_BYTES = 10_000_000;
-  const NOT_SENT = " L'immagine originale non è stata inviata.";
-
-  const MESSAGES = {
-    heic: "Le foto HEIC non sono supportate: converti in JPEG/PNG e riprova.",
-    unsupported: 'Formato immagine non supportato: converti in JPEG/PNG e riprova.',
-    too_many: `Puoi proteggere al massimo ${MAX_IMAGES} immagini alla volta.`,
-    too_large: "Immagine troppo grande: il limite è 10 MB.",
-    image_too_large: "Immagine troppo grande (troppi pixel): riducila e riprova.",
-    image_unsupported: 'Formato immagine non supportato: converti in JPEG/PNG e riprova.',
-    invalid_document: "Il file non è un'immagine valida.",
-    ocr_no_text: "Pseudora non ha riconosciuto testo, volti o codici in questa immagine, quindi non può confermarne la protezione. Se è sicura, disattiva \"Proteggi anche le immagini\" e riprova.",
-    quota: 'Crediti Pseudora esauriti.',
-    monthly_quota_exceeded: 'Crediti Pseudora esauriti.',
-    in_progress: "Un'altra immagine è in elaborazione: attendi qualche secondo e riprova.",
-    rate_limited: 'Troppe richieste a Pseudora: riprova tra poco.',
-    rate_limit_exceeded: 'Troppe richieste a Pseudora: riprova tra poco.',
-    busy: 'Pseudora è occupata: riprova tra poco.',
-    timeout: 'Pseudora non ha risposto in tempo.',
-    unavailable: 'La protezione immagini di Pseudora non è disponibile al momento.',
-    acl_forbidden: 'Il tuo ruolo nel team non consente di proteggere le immagini.',
-    not_configured: 'Pseudora non è configurata: apri il popup dell\'estensione ed effettua il login.',
-    failed: "Pseudora non è riuscita a proteggere l'immagine.",
-  };
-
-  const LABELS = {
-    FACE: ['volto', 'volti'], BARCODE: ['codice QR/a barre', 'codici QR/a barre'], LICENSE_PLATE: ['targa', 'targhe'],
-    PERSON: ['nome', 'nomi'], EMAIL: ['email', 'email'], PHONE: ['telefono', 'telefoni'], IBAN: ['IBAN', 'IBAN'],
-    FISCAL_CODE: ['codice fiscale', 'codici fiscali'], ADDRESS: ['indirizzo', 'indirizzi'], DATE_OF_BIRTH: ['data di nascita', 'date di nascita'],
-  };
+  const t = (key, subs) => globalThis.PseudoraCore.t(key, subs);
+  // Refusal reasons with their own message (img_<code> in _locales); anything else is img_failed.
+  const CODES = ['heic', 'unsupported', 'too_many', 'too_large', 'image_too_large', 'image_unsupported', 'invalid_document',
+    'ocr_no_text', 'quota', 'monthly_quota_exceeded', 'in_progress', 'rate_limited', 'rate_limit_exceeded', 'busy', 'timeout',
+    'unavailable', 'acl_forbidden', 'not_configured', 'network', 'failed'];
 
   /**
    * Why: only formats the Cloud redacts may be offered to it; a HEIC photo needs its own hint.
@@ -64,7 +40,7 @@
 
   /**
    * Why: one event can mix images, other files and refused formats; the decision must be total.
-   * What: { images, others, blocked } where blocked is a MESSAGES key or null; null when
+   * What: { images, others, blocked } where blocked is an img_<code> message code or null; null when
    *       there is nothing for Pseudora to do (no images at all).
    * Test: [png, pdf] → 1 image, 1 other; [png, heic] → blocked 'heic'; [pdf] → null.
    */
@@ -81,10 +57,10 @@
     };
   }
 
-  /** Italian user message for a refused event or a failed REDACT_IMAGE reply. */
+  /** User message for a refused event or a failed REDACT_IMAGE reply, always ending "not sent". */
   function describeError(codeOrReply) {
     const code = typeof codeOrReply === 'string' ? codeOrReply : codeOrReply?.responseCode || '';
-    return (MESSAGES[code] || MESSAGES.failed) + NOT_SENT;
+    return `${t(`img_${CODES.includes(code) ? code : 'failed'}`, { max: MAX_IMAGES })} ${t('imgNotSent')}`;
   }
 
   /**
@@ -104,10 +80,14 @@
    */
   function summarize(results) {
     const n = results.reduce((sum, r) => sum + (Number(r.entity_count) || 0), 0);
-    const labels = [...new Set(results.flatMap(r => r.types || []))]
-      .map(t => (LABELS[t] || [])[1] || t.toLowerCase().replace(/_/g, ' '));
-    if (!n && !labels.length) return 'nessun dato personale trovato';
-    return `${n} ${n === 1 ? 'elemento' : 'elementi'}${labels.length ? `: ${labels.join(', ')}` : ''}`;
+    const labels = [...new Set(results.flatMap(r => r.types || []))].map(type => {
+      const key = `entities_${type}`;
+      const label = t(key);
+      return label === key ? globalThis.PseudoraCore.entityLabel(type).toLowerCase() : label;
+    });
+    if (!n && !labels.length) return t('imgSummaryNone');
+    const count = t(n === 1 ? 'imgCountOne' : 'imgCountMany', { n });
+    return labels.length ? `${count}: ${labels.join(', ')}` : count;
   }
 
   /** "immagine-protetta-1.png": the original name never reaches the Cloud or the site. */
@@ -152,8 +132,12 @@
   globalThis.PseudoraImageGuard = Object.freeze({
     classify, plan, describeError, validResult, summarize, protectedName, base64ToBytes, fileToBase64, safeSend,
     formatOf, timing, MAX_IMAGES,
-    /** Hands already-protected files to the composer (screenshot.js); false when there is none. */
-    attach: files => !!attachImpl?.(files),
+    /**
+     * Hands already-protected files to the composer (screenshot.js) without opening the panel:
+     * resolves true once the site shows the attachment, false when there is no composer or
+     * it never appeared (the caller then copies to the clipboard: one notification channel).
+     */
+    attach: files => (attachImpl ? attachImpl(files) : false),
   });
 
   /* ── DOM wiring (ChatGPT and Claude only) ──────────────────────────────────── */
@@ -224,8 +208,7 @@
   attachImpl = files => {
     const input = site.input(document);
     if (!input) return false;
-    deliver(files, { origin: 'paste', target: input });   // bypass: not intercepted again
-    return true;
+    return deliver(files, { origin: 'paste', target: input }, { quiet: true });   // bypass: not intercepted again
   };
 
   window.addEventListener('paste', onPaste, true);
@@ -305,17 +288,22 @@
     }
   }
 
-  /** Inject, then wait for the site to show an attachment; otherwise offer the download. */
-  function deliver(files, ctx) {
+  /**
+   * Inject, then wait for the site to show an attachment. Resolves true when it does.
+   * Without `quiet` the panel narrates the wait and offers the download on failure.
+   */
+  function deliver(files, ctx, { quiet = false } = {}) {
     const root = composerRoot();
     const before = attachmentMarks(root);
-    if (!inject(files, ctx)) { showPanel({ fallback: files }); return; }
-    showPanel({ status: 'Allego l\'immagine protetta…' });
+    if (!inject(files, ctx)) { if (!quiet) showPanel({ fallback: files }); return Promise.resolve(false); }
+    if (!quiet) showPanel({ status: t('imgAttaching') });
     const started = Date.now();
-    const poll = setInterval(() => {
-      if (attachmentMarks(composerRoot()) > before) { clearInterval(poll); closePanel(); return; }
-      if (Date.now() - started >= timing.verifyMs) { clearInterval(poll); showPanel({ fallback: files }); }
-    }, timing.pollMs);
+    return new Promise(resolve => {
+      const poll = setInterval(() => {
+        if (attachmentMarks(composerRoot()) > before) { clearInterval(poll); if (!quiet) UI().close('image', 'done'); resolve(true); return; }
+        if (Date.now() - started >= timing.verifyMs) { clearInterval(poll); if (!quiet) showPanel({ fallback: files }); resolve(false); }
+      }, timing.pollMs);
+    });
   }
 
   function download(file) {
@@ -328,69 +316,90 @@
     setTimeout(() => URL.revokeObjectURL(url), 30_000);
   }
 
-  /* ── Review panel ─────────────────────────────────────────────────────────── */
-  let panel = null;
+  /* ── Review panel (the shared shell of src/panel.js) ──────────────────────── */
+  const UI = () => globalThis.PseudoraPanel;
   const previews = [];
+  let subtitle = '';
 
-  function closePanel() {
-    panel?.remove();
-    panel = null;
-    previews.splice(0).forEach(u => URL.revokeObjectURL(u));
+  /** "Tipo documento: <label>" for the header, shared with the text panel. */
+  async function loadSubtitle(shell) {
+    const [docs, store] = await Promise.all([
+      safeSend({ type: 'GET_DOC_TYPES' }),
+      new Promise(r => { try { chrome.storage.sync.get({ docType: '' }, r); } catch (_) { r({}); } }),
+    ]);
+    const C = globalThis.PseudoraCore;
+    const value = store?.docType || C.DEFAULT_DOC_TYPE;
+    const { groups } = C.docOptions(docs && !docs.error ? docs : {}, value);
+    subtitle = t('imgSubtitle', { doc: C.docLabel(groups, C.requestFor(value).image) });
+    shell.setSubtitle(subtitle);
   }
 
-  function el(tag, cls, text) {
-    const n = document.createElement(tag);
-    if (cls) n.className = cls;
-    if (text) n.textContent = text;
-    return n;
-  }
+  function revokePreviews() { previews.splice(0).forEach(u => URL.revokeObjectURL(u)); }
 
-  function button(label, cls, onClick) {
-    const b = el('button', `pii-btn ${cls}`, label);
-    b.type = 'button';
-    b.addEventListener('click', onClick);
-    return b;
+  function preview(file, boxes) {
+    const url = URL.createObjectURL(file);
+    previews.push(url);
+    const fig = UI().el('figure', 'pii-img-figure');
+    fig.tabIndex = 0;
+    fig.setAttribute('role', 'button');
+    fig.setAttribute('aria-label', t('imgZoomOpen'));
+    const frame = UI().el('div', 'pii-img-frame');
+    const img = UI().el('img', 'pii-img-preview');
+    img.src = url; img.alt = t('imgPreviewAlt');
+    frame.appendChild(img);
+    boxes.forEach((b, i) => frame.appendChild(UI().marker(b, i)));
+    const cap = UI().el('figcaption', 'pii-img-caption', t('imgZoomOpen'));
+    fig.append(frame, cap);
+    const zoom = () => UI().zoom(url, img.alt, boxes);
+    fig.addEventListener('click', zoom);
+    fig.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); zoom(); } });
+    return fig;
   }
 
   function showPanel({ loading, error, results, files, onUse, onCancel, fallback, status }) {
-    closePanel();
-    panel = el('div', 'pii-img-panel');
-    panel.id = 'pii-img-panel';
-    panel.setAttribute('role', 'dialog');
-    panel.setAttribute('aria-label', 'Pseudora — protezione immagine');
-    panel.appendChild(el('div', 'pii-img-title', 'Pseudora · immagine'));
-    const body = el('div', 'pii-img-body');
-    const foot = el('div', 'pii-img-foot');
-    panel.append(body, foot);
+    const ui = UI();
+    if (!ui) return;
+    revokePreviews();
+    const shell = ui.open({
+      owner: 'image', title: t('imgPanelTitle'), subtitle,
+      onClose: reason => { if (loading && reason !== 'done') onCancel?.(); revokePreviews(); },
+    });
+    loadSubtitle(shell);
+    shell.panel.id = 'pii-img-panel';
+    const { body, foot, alert } = shell;
+    const row = ui.el('div', 'pii-actions');
+    foot.appendChild(row);
+    const closeBtn = label => ui.button(label, 'secondary', () => ui.close('image', 'dismissed'));
 
     if (loading) {
-      body.appendChild(el('div', 'pii-img-status', 'Protezione dell\'immagine in corso…'));
-      foot.appendChild(button('Annulla', 'pii-btn-outline', () => { onCancel?.(); closePanel(); }));
+      const s = ui.el('p', 'pii-img-status');
+      s.setAttribute('role', 'status');
+      s.append(ui.el('span', 'pii-spinner is-dark'), document.createTextNode(t('imgWorking')));
+      body.appendChild(s);
+      row.appendChild(closeBtn(t('actionCancel')));
     } else if (status) {
-      body.appendChild(el('div', 'pii-img-status', status));
+      const s = ui.el('p', 'pii-img-status', status);
+      s.setAttribute('role', 'status');
+      body.appendChild(s);
     } else if (error) {
-      body.appendChild(el('div', 'pii-img-error', error));
-      foot.appendChild(button('Chiudi', 'pii-btn-outline', closePanel));
+      const box = ui.el('div', 'pii-notice is-error pii-img-error');
+      box.append(ui.el('p', 'pii-notice-title', t('imgErrorTitle')), ui.el('p', 'pii-notice-detail', error));
+      alert.appendChild(box);
+      row.appendChild(closeBtn(t('actionClose')));
     } else if (fallback) {
-      body.appendChild(el('div', 'pii-img-error', 'Non sono riuscito ad allegare l\'immagine protetta. Scaricala e allegala a mano (l\'originale non è stato inviato). Se compare già tra gli allegati, ignora questo messaggio.'));
-      fallback.filter(f => classify(f) === 'image').forEach(f => foot.appendChild(button(`Scarica ${f.name}`, '', () => download(f))));
-      foot.appendChild(button('Chiudi', 'pii-btn-outline', closePanel));
+      const box = ui.el('div', 'pii-notice is-policy pii-img-error');
+      box.append(ui.el('p', 'pii-notice-title', t('imgFallbackTitle')), ui.el('p', 'pii-notice-detail', t('imgFallback')));
+      alert.appendChild(box);
+      fallback.filter(f => classify(f) === 'image').forEach(f => row.appendChild(ui.button(t('imgDownload', { name: f.name }), '', () => download(f))));
+      row.appendChild(closeBtn(t('actionClose')));
     } else {
-      const grid = el('div', 'pii-img-previews');
-      files.forEach(f => {
-        const img = el('img', 'pii-img-preview');
-        const url = URL.createObjectURL(f);
-        previews.push(url);
-        img.src = url; img.alt = 'Anteprima dell\'immagine protetta';
-        grid.appendChild(img);
-      });
-      body.appendChild(grid);
-      body.appendChild(el('div', 'pii-img-summary', `Oscurati: ${summarize(results)}.`));
+      files.forEach((f, i) => body.appendChild(preview(f, results[i]?.review_boxes || [])));
+      body.appendChild(ui.el('p', 'pii-img-summary', t('imgSummary', { summary: summarize(results) })));
       const review = results.reduce((n, r) => n + (Number(r.review_regions) || 0), 0);
-      if (review) body.appendChild(el('div', 'pii-img-note', `${review} ${review === 1 ? 'area incerta oscurata' : 'aree incerte oscurate'} per sicurezza.`));
-      foot.appendChild(button('Annulla', 'pii-btn-outline', closePanel));
-      foot.appendChild(button('Usa immagine protetta', 'pii-img-use', () => onUse()));
+      if (review) body.appendChild(ui.el('p', 'pii-hint pii-img-note', t(review === 1 ? 'imgReviewOne' : 'imgReviewMany', { n: review })));
+      const use = ui.button(t('imgUse'), '', () => onUse());
+      use.classList.add('pii-img-use');
+      row.append(use, closeBtn(t('actionCancel')));
     }
-    document.body.appendChild(panel);
   }
 })();

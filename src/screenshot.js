@@ -16,14 +16,19 @@
   const G = globalThis.PseudoraImageGuard;
   const MIN_CSS_PX = 8;
 
-  const TEXT = {
-    hint: "Trascina per selezionare l'area da proteggere · Esc per annullare",
-    working: 'Protezione dello screenshot in corso…',
-    attached: 'Screenshot protetto allegato.',
-    copied: 'Screenshot protetto copiato negli appunti.',
-    copyFailed: 'Screenshot protetto pronto, ma il browser non ha consentito la copia negli appunti.',
-    copy: 'Copia negli appunti',
-  };
+  const t = (key, subs) => globalThis.PseudoraCore.t(key, subs);
+  /** Messages, read lazily so chrome.i18n picks the browser language. */
+  const TEXT = Object.freeze({
+    get hint() { return t('shotHint'); },
+    get full() { return t('shotFullArea'); },
+    get cancel() { return t('shotCancel'); },
+    get working() { return t('shotWorking'); },
+    get attached() { return t('shotAttached'); },
+    get copied() { return t('shotCopied'); },
+    get copyFailed() { return t('shotCopyFailed'); },
+    get copy() { return t('shotCopy'); },
+    get close() { return t('actionClose'); },
+  });
 
   /**
    * Why: captureVisibleTab returns device pixels while the selection is in CSS pixels;
@@ -71,9 +76,9 @@
     const resp = await io.send({ type: 'REDACT_IMAGE', data: await G.fileToBase64(crop), format: 'png' });
     if (io.cancelled?.()) return { outcome: 'cancelled' };
     if (resp?.error || !G.validResult(resp) || resp.format !== 'png') return { outcome: 'error', message: G.describeError(resp) };
-    const summary = `Oscurati: ${G.summarize([resp])}.`;
+    const summary = t('imgSummary', { summary: G.summarize([resp]) });
     const file = new File([G.base64ToBytes(resp.image_base64)], 'screenshot-protetto.png', { type: 'image/png' });
-    if (io.route === 'attach' && io.attach([file])) return { outcome: 'attached', summary, file };
+    if (io.route === 'attach' && await io.attach([file])) return { outcome: 'attached', summary, file };
     try {
       await io.copy(file);
       return { outcome: 'copied', summary, file };
@@ -88,21 +93,47 @@
   if (typeof document === 'undefined' || !globalThis.chrome?.runtime?.onMessage) return;
 
   const site = globalThis.PseudoraComposer?.forHost(location.hostname) || null;
-  let host = null, root = null, busy = false;
+  let host = null, shadow = null, root = null, busy = false;
 
+  // Brand tokens copied from src/tokens.css: the shadow root cannot see page or extension CSS.
   const CSS = `
     :host { all: initial; }
+    .root { --ink: #0f1729; --muted: #5b647a; --surface: #fff; --line: #e6e9f2; --indigo: #4f46e5; --on-indigo: #fff;
+      --err-bg: #fef2f2; --err-text: #991b1b; --err-line: #fecaca; --wash: #eef0ff;
+      font: 14px/1.45 Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: var(--ink); }
+    .root.dark { --ink: #eef0f8; --muted: #a7aec2; --surface: #1a2036; --line: #2a3047; --indigo: #818cf8; --on-indigo: #0f1424;
+      --err-bg: #3a1618; --err-text: #ffb4b4; --err-line: #5c2427; --wash: #23264a; }
     .layer { position: fixed; inset: 0; z-index: 2147483647; cursor: crosshair; }
     canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
     .dim { position: absolute; inset: 0; background: rgba(15, 23, 41, .45); }
-    .sel { position: absolute; border: 2px solid #6366f1; box-shadow: 0 0 0 100vmax rgba(15, 23, 41, .45); }
-    .hint, .toast { position: fixed; left: 50%; transform: translateX(-50%); font: 13px/1.45 system-ui, sans-serif;
-      background: #0f1729; color: #fff; border-radius: 10px; padding: 10px 14px; box-shadow: 0 6px 24px rgba(0,0,0,.3); }
-    .hint { top: 16px; pointer-events: none; }
-    .toast { bottom: 24px; z-index: 2147483647; display: flex; gap: 10px; align-items: center; max-width: min(560px, 92vw); }
-    .toast.error { background: #7f1d1d; }
-    button { font: inherit; border: 0; border-radius: 6px; padding: 5px 10px; cursor: pointer; background: #6366f1; color: #fff; white-space: nowrap; }
-    button.ghost { background: transparent; border: 1px solid rgba(255,255,255,.4); }`;
+    .sel { position: absolute; border: 2px solid #818cf8; box-shadow: 0 0 0 100vmax rgba(15, 23, 41, .45); }
+    .hint, .toast { position: fixed; left: 50%; transform: translateX(-50%); background: var(--surface); color: var(--ink);
+      border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 14px 34px rgba(15, 23, 41, .22); box-sizing: border-box; }
+    .hint { top: 16px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding: 10px 12px 10px 16px;
+      cursor: default; width: max-content; max-width: calc(100vw - 24px); }
+    .hint p { margin: 0; flex: 1 1 220px; }
+    .toast { bottom: 24px; z-index: 2147483647; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center;
+      padding: 12px 12px 12px 16px; width: max-content; max-width: min(560px, calc(100vw - 24px)); }
+    .toast p { margin: 0; flex: 1 1 240px; min-width: 0; }
+    .toast.error { background: var(--err-bg); color: var(--err-text); border-color: var(--err-line); }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    button { font: 600 13px/1.2 inherit; font-family: inherit; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px;
+      cursor: pointer; background: var(--surface); color: var(--ink); white-space: nowrap; min-height: 36px; }
+    button:hover { background: var(--wash); }
+    button.primary { background: var(--indigo); border-color: var(--indigo); color: var(--on-indigo); }
+    button:focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; }
+    kbd { font: 600 12px/1 'IBM Plex Mono', ui-monospace, Menlo, monospace; border: 1px solid var(--line); border-radius: 5px; padding: 2px 5px; }
+    @media (prefers-reduced-motion: no-preference) { .toast { animation: rise .18s ease-out; } }
+    @keyframes rise { from { opacity: 0; transform: translate(-50%, 6px); } }`;
+
+  /** Dark when the page's own background is dark (sites can differ from the OS setting). */
+  function pageIsDark() {
+    for (const n of [document.body, document.documentElement]) {
+      const m = n && getComputedStyle(n).backgroundColor.match(/rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)(?:,\s*([\d.]+))?/);
+      if (m && m[4] !== '0') return (0.2126 * m[1] + 0.7152 * m[2] + 0.0722 * m[3]) / 255 < 0.45;
+    }
+    return !!globalThis.matchMedia?.('(prefers-color-scheme: dark)').matches;
+  }
 
   function el(tag, cls, text) {
     const n = document.createElement(tag);
@@ -115,28 +146,32 @@
   function ensureRoot() {
     if (host?.isConnected) return root;
     host = document.createElement('pseudora-screenshot');
-    root = host.attachShadow({ mode: 'closed' });
-    root.appendChild(el('style', '', CSS));
+    shadow = host.attachShadow({ mode: 'closed' });
+    shadow.appendChild(el('style', '', CSS));
+    root = el('div', `root${pageIsDark() ? ' dark' : ''}`);
+    shadow.appendChild(root);
     document.documentElement.appendChild(host);
     return root;
   }
 
   function clear(selector) { root?.querySelectorAll(selector).forEach(n => n.remove()); }
 
-  function toast(text, { error = false, actions = [], ttl = 0 } = {}) {
+  function toast(text, { error = false, actions = [], ttl = 0, closable = true } = {}) {
     clear('.toast');
-    const t = el('div', `toast${error ? ' error' : ''}`);
-    t.setAttribute('role', error ? 'alert' : 'status');
-    t.appendChild(el('span', '', text));
+    const box = el('div', `toast${error ? ' error' : ''}`);
+    box.setAttribute('role', error ? 'alert' : 'status');
+    box.appendChild(el('p', '', text));
+    const row = el('div', 'actions');
     actions.forEach(([label, fn, cls]) => {
       const b = el('button', cls || '', label);
       b.type = 'button';
       b.addEventListener('click', fn);
-      t.appendChild(b);
+      row.appendChild(b);
     });
-    t.appendChild(Object.assign(el('button', 'ghost', 'Chiudi'), { type: 'button', onclick: () => t.remove() }));
-    ensureRoot().appendChild(t);
-    if (ttl) setTimeout(() => t.remove(), ttl);
+    if (closable) row.appendChild(Object.assign(el('button', '', TEXT.close), { type: 'button', onclick: () => box.remove() }));
+    box.appendChild(row);
+    ensureRoot().appendChild(box);
+    if (ttl) setTimeout(() => box.remove(), ttl);
   }
 
   async function decode(dataUrl) {
@@ -144,7 +179,10 @@
     return createImageBitmap(new Blob([bytes], { type: 'image/png' }));
   }
 
-  /** Frozen capture + drag selection. Resolves with the crop rectangle in image pixels, or null (Esc). */
+  /**
+   * Frozen capture + drag selection. Resolves with the crop rectangle in image pixels, or null (Esc).
+   * Keyboard: Enter (or the focused button) takes the whole visible area, Esc cancels.
+   */
   function select(bitmap) {
     return new Promise(resolve => {
       const layer = el('div', 'layer');
@@ -154,20 +192,44 @@
       const dim = el('div', 'dim');
       const box = el('div', 'sel');
       box.hidden = true;
-      layer.append(canvas, dim, box, el('div', 'hint', TEXT.hint));
-      ensureRoot().appendChild(layer);
       const viewport = { width: window.innerWidth, height: window.innerHeight };
+      const whole = () => cropRect({ x: 0, y: 0, width: viewport.width, height: viewport.height }, viewport, bitmap, window.devicePixelRatio || 1);
+      const hint = el('div', 'hint');
+      hint.setAttribute('role', 'dialog');
+      hint.setAttribute('aria-label', 'Pseudora');
+      const fullBtn = Object.assign(el('button', 'primary', TEXT.full), { type: 'button' });
+      const cancelBtn = Object.assign(el('button', '', TEXT.cancel), { type: 'button' });
+      const actions = el('div', 'actions');
+      actions.append(fullBtn, cancelBtn);
+      hint.append(el('p', '', TEXT.hint), actions);
+      // Clicks on the bar are not selections.
+      hint.addEventListener('pointerdown', e => e.stopPropagation());
+      fullBtn.addEventListener('click', () => done(whole()));
+      cancelBtn.addEventListener('click', () => done(null));
+      layer.append(canvas, dim, box, hint);
+      ensureRoot().appendChild(layer);
+      const previous = document.activeElement;
+      fullBtn.focus();
       let start = null;
 
       const done = rect => {
         window.removeEventListener('keydown', onKey, true);
         layer.remove();
+        previous?.focus?.({ preventScroll: true });
         resolve(rect);
       };
       const onKey = e => {
-        if (e.key !== 'Escape') return;
-        e.preventDefault(); e.stopImmediatePropagation();
-        done(null);
+        if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); done(null); return; }
+        if (e.key === 'Enter' && !start) {
+          e.preventDefault(); e.stopImmediatePropagation();
+          // Enter on a focused bar button clicks it; anywhere else it takes the whole area.
+          if (e.composedPath?.().includes(cancelBtn)) done(null); else done(whole());
+          return;
+        }
+        if (e.key === 'Tab') {                         // keep focus on the two bar buttons
+          e.preventDefault(); e.stopImmediatePropagation();
+          (shadow.activeElement === fullBtn ? cancelBtn : fullBtn).focus();
+        }
       };
       const draw = e => {
         const x = Math.min(start.x, e.clientX), y = Math.min(start.y, e.clientY);
@@ -213,11 +275,11 @@
       if (!rect) return;
       const crop = await cropToPng(bitmap, rect);
       bitmap.close(); bitmap = null;                 // the full capture is gone from here on
-      toast(TEXT.working, { actions: [['Annulla', () => { cancelled.value = true; clear('.toast'); }, 'ghost']] });
+      toast(TEXT.working, { actions: [[TEXT.cancel, () => { cancelled.value = true; clear('.toast'); }]], closable: false });
       const result = await protectShot(crop, {
         send: G.safeSend,
         route: route({ site, hasComposer: !!site?.input(document) }),
-        attach: files => typeof G.attach === 'function' && G.attach(files),
+        attach: files => (typeof G.attach === 'function' ? G.attach(files) : false),
         copy,
         cancelled: () => cancelled.value,
       });
@@ -226,7 +288,7 @@
       if (result.outcome === 'copy_failed') {
         toast(`${TEXT.copyFailed} ${result.summary}`, { actions: [[TEXT.copy, () => copy(result.file)
           .then(() => toast(`${TEXT.copied} ${result.summary}`, { ttl: 6000 }))
-          .catch(() => toast(TEXT.copyFailed, { error: true }))]] });
+          .catch(() => toast(TEXT.copyFailed, { error: true })), 'primary']] });
         return;
       }
       toast(`${result.outcome === 'attached' ? TEXT.attached : TEXT.copied} ${result.summary}`, { ttl: 6000 });

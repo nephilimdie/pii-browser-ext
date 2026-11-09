@@ -6,6 +6,11 @@
  * Bearer takes priority when a valid (or refreshable) token is present.
  */
 
+// Shared pure logic (document type, error kinds, i18n). Absent only in Node tests.
+const loadScript = /** @type {any} */ (globalThis).importScripts;
+if (typeof loadScript === 'function') loadScript.call(globalThis, 'core.js');
+const core = () => globalThis.PseudoraCore;
+
 // ── Message router ────────────────────────────────────────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -17,8 +22,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     DEANONYMIZE:           () => handleDeanonymize(msg),
     HEALTH_CHECK:          () => handleHealth(msg),
     GET_SETTINGS:          () => getSettings(),
-    GET_CONTEXT_TYPES:     () => handleGetContextTypes(msg),
-    GET_DOMAIN_POLICIES:   () => handleGetDomainPolicies(msg),
+    GET_DOC_TYPES:         () => handleDocTypes(),
+    GET_STATUS:            () => handleStatus(),
+    OPEN_LOGIN:            () => openLogin(),
+    OPEN_LOGIN_HERE:       () => loginUrl(),
     GET_OAUTH_CLIENT_INFO: () => handleGetOAuthClientInfo(msg),
     OAUTH_INITIATE:        () => handleOAuthInitiate(msg),
     OAUTH_CALLBACK:        () => handleOAuthCallback(msg),
@@ -30,7 +37,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     SELECT_TEAM:           () => handleSelectTeam(msg),
     GET_TEAMS:             () => getTeams(),
     REDACT_IMAGE:          () => handleRedactImage(msg),
-    GET_IMAGE_OPTIONS:     () => handleImageOptions(),
     START_SCREENSHOT:      () => startScreenshot(msg.tabId, msg.windowId),
   };
 
@@ -45,9 +51,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 });
 
 // The shortcut grants activeTab exactly like a toolbar click; errors surface on the badge.
+// Anonymize and restore run in the page's content script (ChatGPT, Claude, Gemini only).
+const PAGE_COMMANDS = ['anonymize', 'restore'];
 chrome.commands?.onCommand.addListener((command, tab) => {
-  if (command !== 'protected-screenshot' || tab?.id === undefined) return;
-  startScreenshot(tab.id, tab.windowId).catch(err => flagError(tab.id, err.message));
+  if (tab?.id === undefined) return;
+  if (command === 'protected-screenshot') {
+    startScreenshot(tab.id, tab.windowId).catch(err => flagError(tab.id, err.message));
+  } else if (PAGE_COMMANDS.includes(command)) {
+    Promise.resolve(chrome.tabs.sendMessage(tab.id, { type: 'PSEUDORA_COMMAND', command }))
+      .catch(() => flagError(tab.id, core()?.t('shortcutUnsupportedSite') || 'ChatGPT, Claude, Gemini only.'));
+  }
 });
 
 // ── Settings ──────────────────────────────────────────────────────────────────
@@ -60,14 +73,15 @@ const SYNC_DEFAULTS = {
   piiOauthClientId: '',
   language: 'it',
   mode: 'tag',
-  contextType: 'generic',
-  autoSend: false,
+  docType: 'generic_professional',
   interceptSend: false,
   protectImages: true,
-  imageDomain: 'generic_professional',
   faceStyle: 'blur',
   piiKeyRole: 'service',
 };
+
+/** The cloud instance the "Accedi con Pseudora" button uses when no URL was set. */
+const DEFAULT_API_URL = 'https://pseudora.cloud';
 
 const LOCAL_DEFAULTS = {
   piiApiKey: '',
@@ -106,8 +120,22 @@ async function migrateApiKeyOutOfSync() {
   await chrome.storage.sync.remove('piiApiKey');
 }
 
-migrateApiKeyOutOfSync();
-chrome.runtime.onInstalled.addListener(() => { migrateApiKeyOutOfSync(); });
+/**
+ * Why: 1.2.x stored a text "contextType", an image "imageDomain" and a dead "autoSend".
+ * What: rewrites them into the single `docType` (core.migrate) and deletes the old keys.
+ * Test: tests/core.mjs covers the mapping; this only applies the patch.
+ */
+async function migrateDocType() {
+  const old = await chrome.storage.sync.get(['contextType', 'imageDomain', 'autoSend', 'docType']);
+  const patch = core()?.migrate(old);
+  if (!patch) return;
+  await chrome.storage.sync.set(patch.set);
+  await chrome.storage.sync.remove(patch.remove);
+}
+
+const migrations = () => Promise.all([migrateApiKeyOutOfSync(), migrateDocType()]).catch(() => {});
+migrations();
+chrome.runtime.onInstalled.addListener(() => { migrations(); });
 
 // ── OAuth client discovery ────────────────────────────────────────────────────
 
@@ -373,44 +401,92 @@ async function handleHealth({ url, key }) {
     throw new Error('Not authenticated.');
   });
 
-  const r = await fetch(`${baseUrl}/v1/auth/me`, { headers });
-  if (r.status === 401) throw new Error('401 — credentials invalid or inactive.');
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const r = await fetch(`${baseUrl}/v1/auth/me`, { headers }).catch(() => { throw coded('Pseudora is unreachable.', 'network'); });
+  if (r.status === 401) throw coded('Credentials invalid or inactive.', 'auth');
+  if (!r.ok) throw coded(`Server error ${r.status}.`, r.status >= 500 ? 'server' : 'failed');
   const data = await r.json();
   if (!data.can_anonymize) throw new Error(`Role "${data.role}" cannot anonymize.`);
   chrome.storage.sync.set({ piiKeyRole: data.role ?? 'service' });
   return data;
 }
 
-// ── Context types ─────────────────────────────────────────────────────────────
+// ── Document types and status ─────────────────────────────────────────────────
 
-async function handleGetContextTypes({ url, key }) {
-  const s = await getSettings();
-  const baseUrl = (url || s.piiApiUrl || '').replace(/\/$/, '');
-  if (!baseUrl) throw new Error('Not configured.');
-
-  const testSettings = key ? { ...s, piiApiKey: key, oauthAccessToken: '', oauthRefreshToken: '' } : s;
-  const headers = await getAuthHeaders(testSettings);
-
-  const r = await fetch(`${baseUrl}/v1/admin/context-types`, { headers });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const data = await r.json();
-  return Array.isArray(data) ? data : (data.data ?? []);
+/** Error carrying a stable `responseCode` that the UI maps to a message (core.describeError). */
+function coded(message, responseCode, meta = {}) {
+  return Object.assign(new Error(message), { responseCode, meta });
 }
 
-async function handleGetDomainPolicies({ url, key }) {
-  const s = await getSettings();
-  const baseUrl = (url || s.piiApiUrl || '').replace(/\/$/, '');
-  if (!baseUrl) throw new Error('Not configured.');
-
-  const testSettings = key ? { ...s, piiApiKey: key, oauthAccessToken: '', oauthRefreshToken: '' } : s;
-  const headers = await getAuthHeaders(testSettings);
-
-  const r = await fetch(`${baseUrl}/v1/admin/domain-policies`, { headers });
-  console.log('[Pseudora] GET domain-policies', baseUrl, '→ HTTP', r.status, 'auth:', headers.Authorization ? 'Bearer' : (headers['X-Api-Key'] ? 'ApiKey' : 'none'));
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+async function getList(s, path) {
+  const r = await fetch(`${s.piiApiUrl.replace(/\/$/, '')}${path}`, {
+    headers: { ...(await getAuthHeaders(s)), Accept: 'application/json' }, signal: globalThis.AbortSignal?.timeout(API_TIMEOUT_MS),
+  });
+  if (!r.ok) throw coded(`HTTP ${r.status}`, 'failed');
   const data = await r.json();
-  return Array.isArray(data) ? data : (data.data ?? []);
+  return Array.isArray(data) ? data : (data?.data ?? []);
+}
+
+/**
+ * Why: one "Tipo documento" list for popup and page panel, the same presets text and images use.
+ * What: { presets: [{ value, label }], policies: DomainPolicySummary[] }; presets come from
+ *       /v1/images/options in the browser language, team policies from /v1/admin/domain-policies.
+ *       Either list may be empty (signed out, offline): callers fall back to the built-in presets.
+ * Test: tests/image-background.mjs, handleDocTypes merges both and survives a failing one.
+ */
+async function handleDocTypes() {
+  const s = await getSettings();
+  if (!s.piiApiUrl) return { presets: [], policies: [] };
+  const [options, policies] = await Promise.all([
+    handleImageOptions().catch(() => ({ domains: [] })),
+    getList(s, '/v1/admin/domain-policies').catch(() => []),
+  ]);
+  return { presets: options.domains, policies: policies.filter(p => typeof p?.domain === 'string') };
+}
+
+/**
+ * Why: the page button shows protection state; content scripts never read credentials.
+ * What: { configured, loggedIn, teamName, interceptSend, protectImages, docType, mode, shortcuts }.
+ * Test: tests/composer.mjs stubs this reply to render "Protetto · <team>".
+ */
+async function handleStatus() {
+  const s = await getSettings();
+  const team = (s.userTeams || []).find(tm => tm.tenant_code === s.selectedTeamCode);
+  const commands = await (chrome.commands?.getAll?.() ?? Promise.resolve([])).catch(() => []);
+  return {
+    configured: !!s.piiApiUrl && !!(s.oauthAccessToken || s.oauthRefreshToken || s.piiApiKey),
+    loggedIn: !!(s.oauthAccessToken || s.oauthRefreshToken),
+    teamName: team?.name || '',
+    interceptSend: !!s.interceptSend,
+    protectImages: s.protectImages !== false,
+    docType: s.docType,
+    mode: s.mode,
+    shortcuts: Object.fromEntries((commands || []).map(c => [c.name, c.shortcut || ''])),
+  };
+}
+
+/**
+ * Why: "Accedi di nuovo" in the page panel must work without hunting for the popup.
+ * What: starts OAuth on the saved (or default) URL and opens the login tab; without a saved
+ *       URL (first run, or the origin not granted yet) it opens the popup page in a tab instead.
+ * Test: manual (capture harness, auth error → Accedi di nuovo opens a tab).
+ */
+/** The authorization URL for the saved server (the OAuth page's "Riprova" navigates to it). */
+async function loginUrl() {
+  const s = await getSettings();
+  if (!s.piiApiUrl) throw coded('Pseudora is not configured.', 'not_configured');
+  return handleOAuthInitiate({ url: s.piiApiUrl, clientId: s.piiOauthClientId });
+}
+
+async function openLogin() {
+  const s = await getSettings();
+  const granted = s.piiApiUrl && await chrome.permissions?.contains?.({ origins: [`${new URL(s.piiApiUrl).origin}/*`] }).catch(() => false);
+  if (!granted) {
+    await chrome.tabs.create({ url: chrome.runtime.getURL('src/popup.html#account') });
+    return { ok: true, opened: 'popup' };
+  }
+  const { authUrl } = await handleOAuthInitiate({ url: s.piiApiUrl, clientId: s.piiOauthClientId });
+  await chrome.tabs.create({ url: authUrl });
+  return { ok: true, opened: 'login' };
 }
 
 // ── Pseudora Cloud API core ───────────────────────────────────────────────────
@@ -437,8 +513,8 @@ async function post(baseUrl, path, init, timeoutMs = API_TIMEOUT_MS) {
       method: 'POST', ...init, signal: globalThis.AbortSignal?.timeout(timeoutMs),
     });
   } catch (err) {
-    if (err?.name === 'TimeoutError') throw Object.assign(new Error('Pseudora did not respond in time. Nothing was sent.'), { responseCode: 'timeout' });
-    throw err;
+    if (err?.name === 'TimeoutError') throw coded('Pseudora did not respond in time. Nothing was sent.', 'timeout');
+    throw coded('Pseudora is unreachable. Nothing was sent.', 'network');
   }
 }
 
@@ -481,8 +557,11 @@ async function handleRedactImage({ data, format }) {
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   const form = new FormData();
   form.append('file', new Blob([bytes], { type: `image/${format}` }), `image.${format === 'jpeg' ? 'jpg' : format}`);
-  if (OPTION_VALUE.test(s.imageDomain)) form.append('domain', s.imageDomain);
+  form.append('domain', core()?.requestFor(s.docType).image || 'generic_professional');
   form.append('face_style', FACE_STYLES.includes(s.faceStyle) ? s.faceStyle : FACE_STYLES[0]);
+  // Ask for the uncertain regions' boxes so the preview can outline them; the review
+  // image itself (doubtful areas unpainted) is dropped below and never leaves this worker.
+  form.append('review_restore', '1');
 
   // The Cloud negotiates on Accept: without it the reply is raw image bytes, which this JSON parser refuses.
   const r = await post(s.piiApiUrl, '/v1/images/redact', { headers: { ...headers, Accept: 'application/json' }, body: form }, IMAGE_TIMEOUT_MS);
@@ -516,8 +595,19 @@ async function handleRedactImage({ data, format }) {
   return {
     safe: true, format: out, image_base64: result.image_base64,
     entity_count: result.entity_count, review_regions: Number.isSafeInteger(result.review_regions) ? result.review_regions : 0,
-    types,
+    types, review_boxes: reviewBoxes(result.review),
   };
+}
+
+/**
+ * Why: the preview outlines doubtful areas; only their geometry may reach the page.
+ * What: up to 200 [x0, y0, x1, y1] fraction boxes (0..1, x0<x1, y0<y1); anything else dropped.
+ * Test: tests/image-background.mjs, review layer image never returned, bad boxes filtered.
+ */
+function reviewBoxes(review) {
+  const regions = Array.isArray(review?.regions) ? review.regions.slice(0, 200) : [];
+  return regions.map(r => r?.bbox).filter(b => Array.isArray(b) && b.length === 4
+    && b.every(v => typeof v === 'number' && v >= 0 && v <= 1) && b[0] < b[2] && b[1] < b[3]).map(b => [...b]);
 }
 
 /** Face styles the Cloud accepts, the default (irreversible blur) first. */
@@ -537,10 +627,11 @@ async function handleImageOptions() {
   const r = await fetch(`${s.piiApiUrl.replace(/\/$/, '')}/v1/images/options`, {
     headers: { ...(await getAuthHeaders(s)), Accept: 'application/json' }, signal: globalThis.AbortSignal?.timeout(API_TIMEOUT_MS),
   });
+  const lang = String(globalThis.chrome?.i18n?.getUILanguage?.() || 'it').slice(0, 2) === 'it' ? 'it' : 'en';
   if (!r.ok) throw new Error(`Image options unavailable (HTTP ${r.status}).`);
   const body = await r.json();
   const domains = (Array.isArray(body?.domains) ? body.domains : [])
-    .map(d => ({ value: d?.value, label: d?.labels?.it || d?.label }))
+    .map(d => ({ value: d?.value, label: d?.labels?.[lang] || d?.labels?.it || d?.label }))
     .filter(d => typeof d.value === 'string' && OPTION_VALUE.test(d.value) && typeof d.label === 'string' && d.label);
   if (body?.mode !== 'redact' || !domains.length) throw new Error('Invalid image options.');
   return { mode: 'redact', domains };
@@ -549,7 +640,7 @@ async function handleImageOptions() {
 // ── Protected screenshot ──────────────────────────────────────────────────────
 
 /** Injected on demand (activeTab) where the manifest content scripts do not run. */
-const SCREENSHOT_SCRIPTS = { PseudoraComposer: 'src/composer.js', PseudoraImageGuard: 'src/image-guard.js', PseudoraScreenshot: 'src/screenshot.js' };
+const SCREENSHOT_SCRIPTS = { PseudoraCore: 'src/core.js', PseudoraComposer: 'src/composer.js', PseudoraImageGuard: 'src/image-guard.js', PseudoraScreenshot: 'src/screenshot.js' };
 
 /**
  * Why: "Screenshot protetto" (popup button or Alt+Shift+S) must work on any tab with only
@@ -571,17 +662,23 @@ async function startScreenshot(tabId, windowId) {
     const missing = /** @type {string[]} */ (probe?.result ?? Object.keys(SCREENSHOT_SCRIPTS));
     if (missing.length) await chrome.scripting.executeScript({ target: { tabId }, files: missing.map(n => SCREENSHOT_SCRIPTS[n]) });
   } catch {
-    throw Object.assign(new Error('Pseudora non può catturare questa pagina (pagine di Chrome, Web Store, PDF).'), { responseCode: 'not_capturable' });
+    throw coded(msgOr('errNotCapturable', 'Pseudora non può catturare questa pagina (pagine di Chrome, Web Store, PDF).'), 'not_capturable');
   }
   if (!s.piiApiUrl || !(s.oauthAccessToken || s.oauthRefreshToken || s.piiApiKey)) {
     await chrome.tabs.sendMessage(tabId, { type: 'SCREENSHOT_START', error: 'not_configured' });
     return { ok: false, responseCode: 'not_configured' };
   }
   const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' }).catch(() => {
-    throw Object.assign(new Error('Pseudora non è riuscita a catturare la scheda.'), { responseCode: 'capture_failed' });
+    throw coded(msgOr('errCaptureFailed', 'Pseudora non è riuscita a catturare la scheda.'), 'capture_failed');
   });
   await chrome.tabs.sendMessage(tabId, { type: 'SCREENSHOT_START', dataUrl });
   return { ok: true };
+}
+
+/** Translated message, or the Italian fallback where chrome.i18n is absent (Node tests). */
+function msgOr(key, fallback) {
+  const m = core()?.t(key);
+  return m && m !== key ? m : fallback;
 }
 
 /** Keyboard-shortcut failures have no popup to show them: a red "!" badge with the reason as tooltip. */
@@ -602,19 +699,37 @@ function hasSignature(b, format) {
 
 // ── Anonymize / deanonymize ───────────────────────────────────────────────────
 
-async function handleAnonymize({ text, contextId, language, mode, contextType }) {
+/**
+ * Why: every failure must reach the panel as a kind it can explain (policy block ≠ outage ≠ login).
+ * What: reads a non-2xx /v1/* reply and throws coded(): PII_BLOCKED → policy_blocked (with
+ *       blocked_types), 401/403 → auth, 402 → quota, 429 → rate_limited or quota, 5xx → server.
+ * Test: tests/api-core.mjs maps each status and envelope shape.
+ */
+async function throwApiError(r) {
+  const body = await r.json().catch(() => ({}));
+  const err = body?.error;
+  const envelope = err && typeof err === 'object' ? err : null;
+  const code = String(envelope?.response_code || (typeof err === 'string' ? err : '') || '').toLowerCase();
+  const message = envelope?.message || body?.message || `HTTP ${r.status}`;
+  if (/block/.test(code)) throw coded(message, 'policy_blocked', envelope?.meta || {});
+  if (r.status === 401 || r.status === 403) throw coded(message, 'auth');
+  if (r.status === 402 || /quota|credit/.test(code)) throw coded(message, 'quota');
+  if (r.status === 429) throw coded(message, 'rate_limited');
+  if (r.status >= 500) throw coded(message, r.status === 504 ? 'timeout' : 'server');
+  throw coded(message, code || 'failed');
+}
+
+/** Auth headers or a `not_configured` error the panel turns into "Accedi con Pseudora". */
+async function requireAuth(s) {
+  if (!s.piiApiUrl) throw coded('Pseudora is not configured.', 'not_configured');
+  return getAuthHeaders(s).catch(() => { throw coded('Not authenticated.', 'not_configured'); });
+}
+
+async function handleAnonymize({ text, contextId, language, mode, docType }) {
   const s = await getSettings();
-  if (!s.piiApiUrl) throw new Error('API URL not configured — open the extension popup.');
-
+  const headers = await requireAuth(s);
   const tokenId = contextId || crypto.randomUUID();
-  const headers = await getAuthHeaders(s);
-
-  // A "domain:<slug>" selection invokes a domain policy directly (no context_type).
-  // For domain calls we leave `mode` unset unless the user picked one, so the
-  // policy's own default_mode applies.
-  const selected = contextType || s.contextType || 'generic';
-  const isDomain = selected.startsWith('domain:');
-  const chosenMode = mode || s.mode || '';
+  const target = core()?.requestFor(docType || s.docType)?.text || { context_type: 'generic' };
 
   /** @type {Schemas['AnonymizeRequest']} */
   const payload = {
@@ -622,59 +737,34 @@ async function handleAnonymize({ text, contextId, language, mode, contextType })
     context_id:            tokenId,
     language:              language || s.language || 'it',
     include_entity_values: s.piiKeyRole === 'admin',
+    mode:                  mode || s.mode || 'tag',
+    ...target,
   };
-  if (isDomain) {
-    payload.domain = selected.slice('domain:'.length);
-    if (chosenMode) payload.mode = chosenMode;
-  } else {
-    payload.context_type = selected;
-    payload.mode = chosenMode || 'tag';
-  }
 
   const r = await postJson(s.piiApiUrl, '/v1/anonymize', headers, payload);
-  if (!r.ok) {
-    const body = await r.json().catch(() => ({}));
-    const err = body.error;
-    // New boundary contract: error is an object { response_code, message, meta }.
-    if (err && typeof err === 'object' && err.message) {
-      throw Object.assign(new Error(err.message), {
-        responseCode: err.response_code || '',
-        meta: err.meta || {},
-      });
-    }
-    // Legacy string-error shapes (auth/validation handlers).
-    if (r.status === 401) throw new Error(`401 — ${err ?? 'unauthorized'}`);
-    if (r.status === 403) throw new Error(`403 — ${err ?? 'forbidden'}`);
-    throw new Error(`Pseudora: HTTP ${r.status}`);
-  }
+  if (!r.ok) await throwApiError(r);
   /** @type {Partial<Schemas['AnonymizeResponse']> | null} */
-  const data = await r.json();
+  const data = await r.json().catch(() => null);
   if (data?.safe !== true || typeof data.anonymized_text !== 'string') {
-    throw new Error('Pseudora could not confirm safe processing. Nothing was sent.');
+    throw coded('Pseudora could not confirm safe processing. Nothing was sent.', 'unsafe');
   }
   await chrome.storage.local.set({ lastOperation: { token_id: tokenId, type: 'anonymize', feedback_sent: false } });
   return data;
 }
 
-async function handleDeanonymize({ text, contextId, contextType }) {
+async function handleDeanonymize({ text, contextId, docType }) {
   const s = await getSettings();
-  if (!s.piiApiUrl) throw new Error('Not configured — open the extension popup.');
-
+  const headers = await requireAuth(s);
   const tokenId = contextId || crypto.randomUUID();
-  const headers = await getAuthHeaders(s);
-  // Mappings are stored under the anonymize context: for a "domain:<slug>"
-  // selection that's the domain slug, so deanonymize must reuse it (sending
-  // "generic" would miss the mappings and skip the restore).
-  let ctForDeanon = contextType || s.contextType || 'generic';
-  if (ctForDeanon.startsWith('domain:')) ctForDeanon = ctForDeanon.slice('domain:'.length);
+  // Mappings live under the anonymize context: the domain slug for a domain call,
+  // "generic" otherwise. The caller passes the docType it anonymized with.
+  const context = core()?.requestFor(docType || s.docType)?.deanonContext || 'generic';
   const r = await postJson(s.piiApiUrl, '/v1/deanonymize', headers,
-    { text, context_id: tokenId, context_type: ctForDeanon });
-  if (r.status === 401) throw new Error('401 — credentials invalid or expired. Please re-login.');
-  if (r.status === 403) throw new Error('403 — access denied.');
-  if (!r.ok) throw new Error(`Pseudora: HTTP ${r.status}`);
+    { text, context_id: tokenId, context_type: context });
+  if (!r.ok) await throwApiError(r);
   /** @type {Partial<Schemas['DeanonymizeResponse']> | null} */
-  const data = await r.json();
-  if (typeof data?.restored_text !== 'string') throw new Error('Pseudora returned no restored text.');
+  const data = await r.json().catch(() => null);
+  if (typeof data?.restored_text !== 'string') throw coded('Pseudora returned no restored text.', 'failed');
   await chrome.storage.local.set({ lastOperation: { token_id: tokenId, type: 'deanonymize', feedback_sent: false } });
   return data;
 }

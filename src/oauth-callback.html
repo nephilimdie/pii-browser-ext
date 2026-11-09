@@ -1,23 +1,43 @@
 <!doctype html>
-<html lang="en">
+<html lang="it">
 <head>
 <meta charset="utf-8">
-<title>Pseudora — Connecting…</title>
+<title>Pseudora</title>
+<link rel="stylesheet" href="tokens.css">
 <style>
-  body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f8fafc; color: #39415a; }
-  .card { text-align: center; padding: 40px; background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,.08); max-width: 340px; }
-  .icon { font-size: 40px; margin-bottom: 16px; }
-  h1 { font-size: 18px; font-weight: 700; margin: 0 0 8px; }
-  p  { font-size: 14px; color: #8089a0; margin: 0; }
-  .err { color: #dc2626; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; box-sizing: border-box;
+    background: var(--pii-paper); color: var(--pii-ink); font: 400 15px/1.55 var(--pii-font); -webkit-font-smoothing: antialiased; }
+  .card { width: min(420px, 100%); padding: 32px 28px 28px; background: var(--pii-surface); border: 1px solid var(--pii-line);
+    border-radius: 18px; box-shadow: 0 1px 2px rgba(15, 23, 41, 0.04); display: grid; gap: 12px; }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-weight: 800; font-size: 16px; letter-spacing: -0.01em; }
+  .brand img { width: 32px; height: 32px; border-radius: 10px; }
+  .state { display: flex; align-items: center; gap: 10px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--pii-indigo); }
+  .card[data-state="ok"] .dot { background: var(--pii-ok); box-shadow: 0 0 0 4px var(--pii-ok-bg); }
+  .card[data-state="error"] .dot { background: var(--pii-err); box-shadow: 0 0 0 4px var(--pii-err-bg); }
+  .card[data-state="working"] .dot { animation: pulse 1s ease-in-out infinite; }
+  h1 { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.25; }
+  p { margin: 0; color: var(--pii-muted); }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  button { min-height: 40px; padding: 9px 16px; border-radius: 12px; border: 1px solid var(--pii-line-strong); cursor: pointer;
+    font: 700 14px/1.2 var(--pii-font); background: var(--pii-surface); color: var(--pii-ink); }
+  button.primary { background: var(--pii-indigo); border: 0; padding: 10px 17px; color: var(--pii-on-indigo); box-shadow: var(--pii-shadow-glow); }
+  button:focus-visible { outline: 2px solid var(--pii-indigo); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+  @keyframes pulse { 50% { opacity: .35; } }
 </style>
 </head>
-<body>
-<div class="card">
-  <div class="icon" id="icon">🔐</div>
-  <h1 id="title">Connecting to Pseudora…</h1>
-  <p id="msg">Exchanging authorization code. You can close this tab.</p>
-</div>
+<body class="pii-ui">
+<main class="card" id="card" data-state="working" aria-live="polite">
+  <div class="brand"><img src="../icons/icon48.png" alt="">Pseudora</div>
+  <div class="state"><span class="dot" aria-hidden="true"></span><h1 id="title" data-i18n="oauthWorkingTitle">Accesso in corso…</h1></div>
+  <p id="msg" data-i18n="oauthWorkingText">Stiamo collegando l'estensione al tuo account.</p>
+  <div class="actions">
+    <button class="primary" id="retry" type="button" hidden data-i18n="actionRetry">Riprova</button>
+    <button id="close" type="button" hidden data-i18n="oauthCloseTab">Chiudi la scheda</button>
+  </div>
+</main>
+<script src="core.js"></script>
 <script src="oauth-callback.js"></script>
 </body>
 </html>

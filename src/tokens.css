@@ -1,0 +1,70 @@
+/* Pseudora tokens (DESIGN.md "The Clean Room"), shared by the popup, the OAuth page and the
+   in-page toolbar/panel. Scoped to .pii-ui, never :root, so host pages are untouched.
+   Dark values follow the desktop app; the theme is set with data-pii-theme. */
+.pii-ui {
+  --pii-indigo: #4f46e5;
+  --pii-indigo-deep: #4338ca;
+  --pii-on-indigo: #ffffff;
+  --pii-wash: #eef0ff;
+  --pii-ink: #0f1729;
+  --pii-slate: #39415a;
+  --pii-muted: #5b647a;          /* 5.9:1 on white: the floor for any readable label */
+  --pii-quiet: #8089a0;          /* non-text only: dots, dividers, icons */
+  --pii-line: #e6e9f2;
+  --pii-line-strong: #d3d8e6;
+  --pii-paper: #fbfcfe;
+  --pii-paper-soft: #f4f6fb;
+  --pii-surface: #ffffff;
+  --pii-hover: #eef0fb;
+  --pii-original-bg: #fef3c7;
+  --pii-original-text: #92400e;
+  --pii-tag-bg: #dcfce7;
+  --pii-tag-text: #047857;
+  --pii-ok: #0f9e6e;
+  --pii-ok-bg: #ecfdf5;
+  --pii-ok-text: #065f46;
+  --pii-err: #dc2626;
+  --pii-err-bg: #fef2f2;
+  --pii-err-text: #991b1b;
+  --pii-warn: #b45309;
+  --pii-warn-bg: #fffbeb;
+  --pii-warn-line: #fcd34d;
+  --pii-warn-text: #92400e;
+  --pii-focus: 0 0 0 3px rgba(79, 70, 229, 0.28);
+  --pii-shadow-menu: 0 14px 34px rgba(15, 23, 41, 0.14);
+  --pii-shadow-glow: 0 6px 16px rgba(79, 70, 229, 0.28);
+  --pii-font: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --pii-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  color-scheme: light;
+}
+.pii-ui[data-pii-theme="dark"] {
+  --pii-indigo: #818cf8;
+  --pii-indigo-deep: #a5b4fc;
+  --pii-on-indigo: #0f1424;
+  --pii-wash: #23264a;
+  --pii-ink: #eef0f8;
+  --pii-slate: #c9cee0;
+  --pii-muted: #a7aec2;
+  --pii-quiet: #7d859c;
+  --pii-line: #2a3047;
+  --pii-line-strong: #3a415c;
+  --pii-paper: #0f1424;
+  --pii-paper-soft: #161c30;
+  --pii-surface: #1a2036;
+  --pii-hover: #23294a;
+  --pii-original-bg: #3b2a10;
+  --pii-original-text: #fcd38d;
+  --pii-tag-bg: #0f2b23;
+  --pii-tag-text: #7ce0bd;
+  --pii-ok-bg: #0f2b23;
+  --pii-ok-text: #7ce0bd;
+  --pii-err-bg: #3a1618;
+  --pii-err-text: #ffb4b4;
+  --pii-warn-bg: #33240c;
+  --pii-warn-line: #6b4a12;
+  --pii-warn-text: #fcd38d;
+  --pii-focus: 0 0 0 3px rgba(129, 140, 248, 0.45);
+  --pii-shadow-menu: 0 14px 34px rgba(0, 0, 0, 0.45);
+  --pii-shadow-glow: none;
+  color-scheme: dark;
+}

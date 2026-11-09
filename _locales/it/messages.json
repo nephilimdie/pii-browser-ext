@@ -1,0 +1,857 @@
+{
+  "extName": {
+    "message": "Pseudora"
+  },
+  "extDescription": {
+    "message": "Toglie nomi, email, IBAN e codici fiscali dal testo prima che ChatGPT, Claude o Gemini lo ricevano."
+  },
+  "cmdAnonymize": {
+    "message": "Anonimizza il testo o apri il pannello"
+  },
+  "cmdRestore": {
+    "message": "Ripristina il testo originale"
+  },
+  "cmdScreenshot": {
+    "message": "Screenshot protetto"
+  },
+  "brandSub": {
+    "message": "Protezione dati per l'AI"
+  },
+  "statusSetup": {
+    "message": "Da configurare"
+  },
+  "statusOn": {
+    "message": "Protezione attiva"
+  },
+  "statusOff": {
+    "message": "Invio non protetto"
+  },
+  "tabsLabel": {
+    "message": "Sezioni"
+  },
+  "tabProtect": {
+    "message": "Protezione"
+  },
+  "tabAccount": {
+    "message": "Account"
+  },
+  "tabHelp": {
+    "message": "Guida"
+  },
+  "onboardTitle": {
+    "message": "Accedi per proteggere i tuoi messaggi"
+  },
+  "onboardText": {
+    "message": "Con l'account Pseudora i dati personali vengono sostituiti prima di arrivare a ChatGPT, Claude o Gemini."
+  },
+  "onboardSelfHosted": {
+    "message": "Usi un'istanza self-hosted o una chiave API?"
+  },
+  "loginButton": {
+    "message": "Accedi con Pseudora"
+  },
+  "loginConnecting": {
+    "message": "Apro la pagina di accesso…"
+  },
+  "loginContinueInTab": {
+    "message": "Completa l'accesso nella nuova scheda."
+  },
+  "errLoginFailed": {
+    "message": "Non è stato possibile avviare l'accesso. Controlla la connessione e riprova."
+  },
+  "errInvalidUrl": {
+    "message": "L'indirizzo del server non è valido."
+  },
+  "errHostDenied": {
+    "message": "Accesso al server negato: senza questo permesso Pseudora non può collegarsi."
+  },
+  "logoutButton": {
+    "message": "Esci"
+  },
+  "accountLoggedOut": {
+    "message": "Non hai effettuato l'accesso."
+  },
+  "accountUser": {
+    "message": "Utente"
+  },
+  "groupSend": {
+    "message": "Invio"
+  },
+  "groupDocument": {
+    "message": "Documento"
+  },
+  "interceptTitle": {
+    "message": "Proteggi l'invio"
+  },
+  "interceptDesc": {
+    "message": "Quando premi Invio, Pseudora anonimizza il testo prima che parta."
+  },
+  "imagesTitle": {
+    "message": "Proteggi anche le immagini"
+  },
+  "imagesDesc": {
+    "message": "Screenshot e immagini incollati in ChatGPT e Claude vengono oscurati prima del caricamento."
+  },
+  "imagesNeedsIntercept": {
+    "message": "Funziona solo con «Proteggi l'invio» attivo."
+  },
+  "fieldDocType": {
+    "message": "Tipo documento"
+  },
+  "fieldDocTypeHint": {
+    "message": "Vale per testo e immagini."
+  },
+  "docGroupPresets": {
+    "message": "Tipi di documento"
+  },
+  "docGroupTeam": {
+    "message": "Policy del team"
+  },
+  "docGroupOther": {
+    "message": "Scelta salvata"
+  },
+  "docUnavailable": {
+    "message": "{name} (non disponibile)"
+  },
+  "doc_generic_professional": {
+    "message": "Generico"
+  },
+  "doc_contract_analysis": {
+    "message": "Contratto o atto"
+  },
+  "doc_hr_payroll": {
+    "message": "Busta paga e personale"
+  },
+  "doc_tax_accounting": {
+    "message": "Fisco e contabilità"
+  },
+  "doc_real_estate_insurance": {
+    "message": "Immobili e assicurazioni"
+  },
+  "doc_fine_appeal": {
+    "message": "Ricorso contro multa"
+  },
+  "doc_condominio": {
+    "message": "Condominio"
+  },
+  "fieldMode": {
+    "message": "Modalità"
+  },
+  "modeTag": {
+    "message": "Etichette reversibili"
+  },
+  "modeSurrogate": {
+    "message": "Dati fittizi"
+  },
+  "modeTagShort": {
+    "message": "Si può ripristinare l'originale."
+  },
+  "modeSurrogateShort": {
+    "message": "Il testo resta naturale; la corrispondenza è salvata per il ripristino."
+  },
+  "modeTagHint": {
+    "message": "«Mario Rossi» diventa [PERSON_1] e si può ripristinare."
+  },
+  "modeSurrogateHint": {
+    "message": "«Mario Rossi» diventa un nome verosimile, così il testo resta naturale."
+  },
+  "fieldFaces": {
+    "message": "Volti nelle immagini"
+  },
+  "faceBlur": {
+    "message": "Sfocatura"
+  },
+  "facePixelate": {
+    "message": "Pixel"
+  },
+  "faceBlack": {
+    "message": "Riquadro nero"
+  },
+  "faceHint": {
+    "message": "Sfocatura e pixel sono irreversibili."
+  },
+  "fieldLanguage": {
+    "message": "Lingua del testo"
+  },
+  "langIt": {
+    "message": "Italiano"
+  },
+  "langEn": {
+    "message": "Inglese"
+  },
+  "langDe": {
+    "message": "Tedesco"
+  },
+  "langFr": {
+    "message": "Francese"
+  },
+  "langEs": {
+    "message": "Spagnolo"
+  },
+  "langPt": {
+    "message": "Portoghese"
+  },
+  "saved": {
+    "message": "Salvato"
+  },
+  "shotButton": {
+    "message": "Screenshot protetto"
+  },
+  "fieldTeam": {
+    "message": "Team"
+  },
+  "teamHint": {
+    "message": "Le policy del team scelto valgono per testo e immagini."
+  },
+  "advancedTitle": {
+    "message": "Avanzate: istanza self-hosted e chiave API"
+  },
+  "advancedIntro": {
+    "message": "Servono solo se lo studio usa un'istanza Pseudora propria o una chiave API. Per Pseudora Cloud non cambiare nulla."
+  },
+  "fieldApiUrl": {
+    "message": "Indirizzo del server"
+  },
+  "httpWarn": {
+    "message": "L'indirizzo usa HTTP senza cifratura: le credenziali viaggiano in chiaro. Usa HTTPS."
+  },
+  "fieldApiKey": {
+    "message": "Chiave API (alternativa all'accesso)"
+  },
+  "toggleKey": {
+    "message": "Mostra o nascondi la chiave"
+  },
+  "fieldClientId": {
+    "message": "ID client OAuth"
+  },
+  "clientIdPlaceholder": {
+    "message": "Rilevato dal server"
+  },
+  "clientIdHint": {
+    "message": "Rilevato in automatico dal server. Modificalo solo per un'istanza personalizzata."
+  },
+  "saveConnection": {
+    "message": "Salva"
+  },
+  "testConnection": {
+    "message": "Verifica"
+  },
+  "connectionSaved": {
+    "message": "Connessione salvata."
+  },
+  "connectionTesting": {
+    "message": "Verifico la connessione…"
+  },
+  "connectionOk": {
+    "message": "Connessione riuscita: puoi anonimizzare."
+  },
+  "connectionAuth": {
+    "message": "Credenziali non valide o scadute: accedi di nuovo o controlla la chiave API."
+  },
+  "connectionNetwork": {
+    "message": "Server non raggiungibile: controlla indirizzo e connessione."
+  },
+  "connectionServer": {
+    "message": "Il server ha risposto con un errore. Riprova tra poco."
+  },
+  "connectionFailed": {
+    "message": "Connessione non riuscita."
+  },
+  "resetCache": {
+    "message": "Reimposta accesso e cache…"
+  },
+  "resetConfirm": {
+    "message": "Verrai disconnesso e l'ID client OAuth verrà dimenticato. Le preferenze restano."
+  },
+  "resetConfirmYes": {
+    "message": "Reimposta"
+  },
+  "resetDone": {
+    "message": "Accesso e cache reimpostati."
+  },
+  "helpHowTitle": {
+    "message": "Come funziona"
+  },
+  "helpStep1": {
+    "message": "Accedi con il tuo account Pseudora."
+  },
+  "helpStep2": {
+    "message": "Apri ChatGPT, Claude o Gemini e scrivi come sempre."
+  },
+  "helpStep3": {
+    "message": "Con «Proteggi l'invio» attivo, premi Invio: Pseudora sostituisce nomi, codici fiscali, IBAN ed email prima che il testo parta."
+  },
+  "helpStep4": {
+    "message": "Il pulsante Pseudora accanto al campo mostra lo stato e apre il pannello con ciò che è stato sostituito."
+  },
+  "helpStep5": {
+    "message": "«Ripristina originale» rimette nel campo il testo con i dati personali."
+  },
+  "helpModesTitle": {
+    "message": "Etichette o dati fittizi"
+  },
+  "helpShortcutsTitle": {
+    "message": "Scorciatoie da tastiera"
+  },
+  "helpEditShortcuts": {
+    "message": "Modifica le scorciatoie"
+  },
+  "helpSitesTitle": {
+    "message": "Siti supportati"
+  },
+  "helpSitesNote": {
+    "message": "(immagini: ChatGPT e Claude)"
+  },
+  "helpMore": {
+    "message": "Guida completa e informativa privacy su"
+  },
+  "footerSource": {
+    "message": "Codice sorgente"
+  },
+  "shortcutNotSet": {
+    "message": "non impostata"
+  },
+  "shortcutAnonymize": {
+    "message": "{keys} anonimizza"
+  },
+  "shortcutRestore": {
+    "message": "{keys} ripristina"
+  },
+  "shortcutUnsupportedSite": {
+    "message": "Questa scorciatoia funziona su ChatGPT, Claude e Gemini."
+  },
+  "toolbarSetup": {
+    "message": "Pseudora · accedi"
+  },
+  "toolbarSetupAria": {
+    "message": "Pseudora non è configurata. Apri il pannello per accedere."
+  },
+  "toolbarOff": {
+    "message": "Pseudora · invio libero"
+  },
+  "toolbarOffAria": {
+    "message": "Pseudora: protezione invio non attiva. Tipo documento {doc}. Apri il pannello per anonimizzare."
+  },
+  "toolbarProtected": {
+    "message": "Protetto"
+  },
+  "toolbarProtectedTeam": {
+    "message": "Protetto · {team}"
+  },
+  "toolbarOnAria": {
+    "message": "Pseudora: protezione invio attiva, team {team}, tipo documento {doc}. Apri il pannello."
+  },
+  "toolbarBusy": {
+    "message": "Anonimizzo…"
+  },
+  "panelClose": {
+    "message": "Chiudi il pannello"
+  },
+  "panelSubtitle": {
+    "message": "{doc} · {mode}"
+  },
+  "tabAnonymize": {
+    "message": "Anonimizza"
+  },
+  "tabResult": {
+    "message": "Risultato"
+  },
+  "paneInterceptOn": {
+    "message": "Protezione invio attiva: premendo Invio il testo viene anonimizzato prima di partire."
+  },
+  "paneInterceptOff": {
+    "message": "Protezione invio non attiva: anonimizza da qui, o attivala dal popup di Pseudora."
+  },
+  "actionAnonymize": {
+    "message": "Anonimizza"
+  },
+  "actionAnonymizeSend": {
+    "message": "Anonimizza e invia"
+  },
+  "actionCopyProtected": {
+    "message": "Copia testo protetto"
+  },
+  "actionCopyOriginal": {
+    "message": "Copia originale"
+  },
+  "actionRestore": {
+    "message": "Ripristina originale"
+  },
+  "actionRestoreHint": {
+    "message": "Rimette nel campo il testo con i dati personali."
+  },
+  "actionRetry": {
+    "message": "Riprova"
+  },
+  "actionLogin": {
+    "message": "Accedi di nuovo"
+  },
+  "actionCancel": {
+    "message": "Annulla"
+  },
+  "actionClose": {
+    "message": "Chiudi"
+  },
+  "copied": {
+    "message": "Copiato"
+  },
+  "copyFailed": {
+    "message": "Copia non riuscita"
+  },
+  "emptyComposer": {
+    "message": "Il campo del messaggio è vuoto: scrivi il testo da proteggere."
+  },
+  "resultEmpty": {
+    "message": "Ancora nessun risultato. Scrivi nel campo e premi Anonimizza: qui vedrai cosa è stato sostituito e con quale etichetta."
+  },
+  "resultSummaryOne": {
+    "message": "1 dato personale sostituito"
+  },
+  "resultSummaryMany": {
+    "message": "{n} dati personali sostituiti"
+  },
+  "resultSummaryNone": {
+    "message": "Nessun dato personale trovato: il testo è invariato."
+  },
+  "resultMapCaption": {
+    "message": "Cosa è stato sostituito"
+  },
+  "resultColSent": {
+    "message": "Inviato"
+  },
+  "resultColOriginal": {
+    "message": "Originale"
+  },
+  "resultColType": {
+    "message": "Tipo"
+  },
+  "resultValueHidden": {
+    "message": "non mostrato"
+  },
+  "resultProtectedText": {
+    "message": "Testo protetto"
+  },
+  "resultOriginalText": {
+    "message": "Testo originale (contiene dati personali)"
+  },
+  "restoreDone": {
+    "message": "Testo originale ripristinato nel campo."
+  },
+  "restoreNothing": {
+    "message": "Niente da ripristinare: anonimizza prima un testo."
+  },
+  "feedbackQuestion": {
+    "message": "Il risultato ti è utile?"
+  },
+  "feedbackYes": {
+    "message": "Sì"
+  },
+  "feedbackNo": {
+    "message": "No"
+  },
+  "feedbackThanks": {
+    "message": "Grazie del riscontro."
+  },
+  "feedbackFailed": {
+    "message": "Non è stato possibile inviare il riscontro."
+  },
+  "errTitle_policy_blocked": {
+    "message": "Bloccato dalla policy del team"
+  },
+  "errDetail_policy_blocked": {
+    "message": "Il testo contiene un dato che la policy non consente di inviare. Rimuovilo o chiedi all'amministratore del team. Nulla è stato inviato."
+  },
+  "errDetail_policy_types": {
+    "message": "Il testo contiene: {types}. Rimuovi questi dati o chiedi all'amministratore del team. Nulla è stato inviato."
+  },
+  "errTitle_auth": {
+    "message": "Accesso scaduto"
+  },
+  "errDetail_auth": {
+    "message": "La sessione non è più valida. Accedi di nuovo per continuare. Nulla è stato inviato."
+  },
+  "errTitle_not_configured": {
+    "message": "Pseudora non è collegata"
+  },
+  "errDetail_not_configured": {
+    "message": "Accedi con il tuo account Pseudora per proteggere il testo. Nulla è stato inviato."
+  },
+  "errTitle_server": {
+    "message": "Servizio non raggiungibile"
+  },
+  "errDetail_server": {
+    "message": "Pseudora non ha risposto correttamente. Nulla è stato inviato: riprova tra poco."
+  },
+  "errTitle_timeout": {
+    "message": "Pseudora non ha risposto in tempo"
+  },
+  "errDetail_timeout": {
+    "message": "Nulla è stato inviato. Riprova; se il testo è molto lungo, dividilo."
+  },
+  "errTitle_network": {
+    "message": "Connessione assente"
+  },
+  "errDetail_network": {
+    "message": "Non è stato possibile raggiungere Pseudora. Controlla la rete. Nulla è stato inviato."
+  },
+  "errTitle_rate_limited": {
+    "message": "Troppe richieste"
+  },
+  "errDetail_rate_limited": {
+    "message": "Attendi qualche secondo e riprova. Nulla è stato inviato."
+  },
+  "errTitle_quota": {
+    "message": "Crediti Pseudora esauriti"
+  },
+  "errDetail_quota": {
+    "message": "Il credito del periodo è finito: lo trovi nel tuo account su pseudora.cloud. Nulla è stato inviato."
+  },
+  "errTitle_unsafe": {
+    "message": "Protezione non confermata"
+  },
+  "errDetail_unsafe": {
+    "message": "Pseudora non ha potuto confermare che il testo sia protetto. Nulla è stato inviato."
+  },
+  "errTitle_editor_write_failed": {
+    "message": "Testo protetto non inserito"
+  },
+  "errDetail_editor_write_failed": {
+    "message": "Non è stato possibile scrivere il testo protetto nel campo del sito. Nulla è stato inviato: riprova o copia il testo protetto."
+  },
+  "errTitle_reloaded": {
+    "message": "Pseudora è stata aggiornata"
+  },
+  "errDetail_reloaded": {
+    "message": "Ricarica questa pagina per continuare. Nulla è stato inviato."
+  },
+  "errTitle_failed": {
+    "message": "Anonimizzazione non riuscita"
+  },
+  "errDetail_failed": {
+    "message": "Si è verificato un errore imprevisto. Nulla è stato inviato."
+  },
+  "errNotCapturable": {
+    "message": "Pseudora non può catturare questa pagina (pagine di Chrome, Web Store, PDF)."
+  },
+  "errCaptureFailed": {
+    "message": "Pseudora non è riuscita a catturare la scheda."
+  },
+  "imgPanelTitle": {
+    "message": "Immagine protetta"
+  },
+  "imgSubtitle": {
+    "message": "Tipo documento: {doc}"
+  },
+  "imgWorking": {
+    "message": "Protezione dell'immagine in corso…"
+  },
+  "imgAttaching": {
+    "message": "Allego l'immagine protetta…"
+  },
+  "imgErrorTitle": {
+    "message": "Immagine non protetta"
+  },
+  "imgFallbackTitle": {
+    "message": "Allegala a mano"
+  },
+  "imgFallback": {
+    "message": "Non sono riuscito ad allegare l'immagine protetta: scaricala e allegala a mano. L'originale non è stato inviato. Se compare già tra gli allegati, ignora questo messaggio."
+  },
+  "imgDownload": {
+    "message": "Scarica {name}"
+  },
+  "imgUse": {
+    "message": "Usa immagine protetta"
+  },
+  "imgPreviewAlt": {
+    "message": "Anteprima dell'immagine protetta"
+  },
+  "imgZoomOpen": {
+    "message": "Clic per ingrandire e controllare"
+  },
+  "imgZoomTitle": {
+    "message": "Anteprima ingrandita"
+  },
+  "imgZoomClose": {
+    "message": "Chiudi anteprima"
+  },
+  "imgSummary": {
+    "message": "Oscurati: {summary}."
+  },
+  "imgSummaryNone": {
+    "message": "nessun dato personale trovato"
+  },
+  "imgCountOne": {
+    "message": "1 elemento"
+  },
+  "imgCountMany": {
+    "message": "{n} elementi"
+  },
+  "imgReviewOne": {
+    "message": "1 area incerta oscurata per sicurezza (contornata)."
+  },
+  "imgReviewMany": {
+    "message": "{n} aree incerte oscurate per sicurezza (contornate)."
+  },
+  "imgNotSent": {
+    "message": "L'immagine originale non è stata inviata."
+  },
+  "img_heic": {
+    "message": "Le foto HEIC non sono supportate: converti in JPEG/PNG e riprova."
+  },
+  "img_unsupported": {
+    "message": "Formato immagine non supportato: converti in JPEG/PNG e riprova."
+  },
+  "img_image_unsupported": {
+    "message": "Formato immagine non supportato: converti in JPEG/PNG e riprova."
+  },
+  "img_too_many": {
+    "message": "Puoi proteggere al massimo {max} immagini alla volta."
+  },
+  "img_too_large": {
+    "message": "Immagine troppo grande: il limite è 10 MB."
+  },
+  "img_image_too_large": {
+    "message": "Immagine troppo grande (troppi pixel): riducila e riprova."
+  },
+  "img_invalid_document": {
+    "message": "Il file non è un'immagine valida."
+  },
+  "img_ocr_no_text": {
+    "message": "Pseudora non ha riconosciuto testo, volti o codici in questa immagine, quindi non può confermarne la protezione. Se è sicura, disattiva «Proteggi anche le immagini» e riprova."
+  },
+  "img_quota": {
+    "message": "Crediti Pseudora esauriti."
+  },
+  "img_monthly_quota_exceeded": {
+    "message": "Crediti Pseudora esauriti."
+  },
+  "img_in_progress": {
+    "message": "Un'altra immagine è in elaborazione: attendi qualche secondo e riprova."
+  },
+  "img_rate_limited": {
+    "message": "Troppe richieste a Pseudora: riprova tra poco."
+  },
+  "img_rate_limit_exceeded": {
+    "message": "Troppe richieste a Pseudora: riprova tra poco."
+  },
+  "img_busy": {
+    "message": "Pseudora è occupata: riprova tra poco."
+  },
+  "img_timeout": {
+    "message": "Pseudora non ha risposto in tempo."
+  },
+  "img_unavailable": {
+    "message": "La protezione immagini di Pseudora non è disponibile al momento."
+  },
+  "img_acl_forbidden": {
+    "message": "Il tuo ruolo nel team non consente di proteggere le immagini."
+  },
+  "img_not_configured": {
+    "message": "Pseudora non è configurata: apri il popup dell'estensione ed effettua l'accesso."
+  },
+  "img_network": {
+    "message": "Pseudora non è raggiungibile: controlla la connessione."
+  },
+  "img_failed": {
+    "message": "Pseudora non è riuscita a proteggere l'immagine."
+  },
+  "shotHint": {
+    "message": "Trascina per selezionare l'area da proteggere, oppure premi Invio per tutta l'area visibile. Esc annulla."
+  },
+  "shotFullArea": {
+    "message": "Tutta l'area visibile"
+  },
+  "shotCancel": {
+    "message": "Annulla"
+  },
+  "shotWorking": {
+    "message": "Protezione dello screenshot in corso…"
+  },
+  "shotAttached": {
+    "message": "Screenshot protetto allegato."
+  },
+  "shotCopied": {
+    "message": "Screenshot protetto copiato negli appunti."
+  },
+  "shotCopyFailed": {
+    "message": "Screenshot protetto pronto, ma il browser non ha consentito la copia negli appunti."
+  },
+  "shotCopy": {
+    "message": "Copia negli appunti"
+  },
+  "oauthWorkingTitle": {
+    "message": "Accesso in corso…"
+  },
+  "oauthWorkingText": {
+    "message": "Stiamo collegando l'estensione al tuo account."
+  },
+  "oauthOkTitle": {
+    "message": "Accesso effettuato"
+  },
+  "oauthOkTitleName": {
+    "message": "Accesso effettuato come {name}"
+  },
+  "oauthOkText": {
+    "message": "Puoi chiudere questa scheda e tornare alla chat."
+  },
+  "oauthDeniedTitle": {
+    "message": "Accesso annullato"
+  },
+  "oauthDeniedText": {
+    "message": "Non hai autorizzato l'estensione. Nessun dato è stato condiviso. Puoi riprovare quando vuoi."
+  },
+  "oauthErrorTitle": {
+    "message": "Accesso non riuscito"
+  },
+  "oauthErrorText": {
+    "message": "Il collegamento con Pseudora non è andato a buon fine. Riprova; se succede ancora, riapri il popup dell'estensione."
+  },
+  "oauthNoCode": {
+    "message": "La pagina è stata aperta senza un codice di accesso. Riprova dall'inizio."
+  },
+  "oauthRetryFailed": {
+    "message": "Non è stato possibile riavviare l'accesso. Apri il popup dell'estensione e premi «Accedi con Pseudora»."
+  },
+  "oauthCloseTab": {
+    "message": "Chiudi la scheda"
+  },
+  "entity_PERSON": {
+    "message": "Persona"
+  },
+  "entity_FISCAL_CODE": {
+    "message": "Codice fiscale"
+  },
+  "entity_IBAN": {
+    "message": "IBAN"
+  },
+  "entity_EMAIL": {
+    "message": "Email"
+  },
+  "entity_PHONE": {
+    "message": "Telefono"
+  },
+  "entity_ADDRESS": {
+    "message": "Indirizzo"
+  },
+  "entity_DATE_OF_BIRTH": {
+    "message": "Data di nascita"
+  },
+  "entity_CREDIT_CARD": {
+    "message": "Carta di credito"
+  },
+  "entity_LICENSE_PLATE": {
+    "message": "Targa"
+  },
+  "entity_VAT_NUMBER": {
+    "message": "Partita IVA"
+  },
+  "entity_PEC": {
+    "message": "PEC"
+  },
+  "entity_ORGANIZATION": {
+    "message": "Organizzazione"
+  },
+  "entity_LOCATION": {
+    "message": "Luogo"
+  },
+  "entity_IP_ADDRESS": {
+    "message": "Indirizzo IP"
+  },
+  "entity_URL": {
+    "message": "Indirizzo web"
+  },
+  "entity_ID_DOCUMENT": {
+    "message": "Documento d'identità"
+  },
+  "entity_IDENTITY_CARD": {
+    "message": "Carta d'identità"
+  },
+  "entity_PASSPORT": {
+    "message": "Passaporto"
+  },
+  "entity_DRIVER_LICENSE": {
+    "message": "Patente"
+  },
+  "entity_HEALTH_CARD": {
+    "message": "Tessera sanitaria"
+  },
+  "entity_DATE": {
+    "message": "Data"
+  },
+  "entity_AGE": {
+    "message": "Età"
+  },
+  "entity_BANK_ACCOUNT": {
+    "message": "Conto bancario"
+  },
+  "entity_SWIFT": {
+    "message": "Codice SWIFT"
+  },
+  "entity_MEDICAL": {
+    "message": "Dato sanitario"
+  },
+  "entity_USERNAME": {
+    "message": "Nome utente"
+  },
+  "entity_PASSWORD": {
+    "message": "Password"
+  },
+  "entity_API_KEY": {
+    "message": "Chiave API"
+  },
+  "entity_SECRET": {
+    "message": "Segreto"
+  },
+  "entity_FACE": {
+    "message": "Volto"
+  },
+  "entity_BARCODE": {
+    "message": "Codice QR/a barre"
+  },
+  "entity_SIGNATURE": {
+    "message": "Firma"
+  },
+  "entity_STAMP": {
+    "message": "Timbro"
+  },
+  "entities_FACE": {
+    "message": "volti"
+  },
+  "entities_BARCODE": {
+    "message": "codici QR/a barre"
+  },
+  "entities_LICENSE_PLATE": {
+    "message": "targhe"
+  },
+  "entities_PERSON": {
+    "message": "nomi"
+  },
+  "entities_EMAIL": {
+    "message": "email"
+  },
+  "entities_PHONE": {
+    "message": "telefoni"
+  },
+  "entities_IBAN": {
+    "message": "IBAN"
+  },
+  "entities_FISCAL_CODE": {
+    "message": "codici fiscali"
+  },
+  "entities_ADDRESS": {
+    "message": "indirizzi"
+  },
+  "entities_DATE_OF_BIRTH": {
+    "message": "date di nascita"
+  },
+  "entities_SIGNATURE": {
+    "message": "firme"
+  },
+  "entities_STAMP": {
+    "message": "timbri"
+  },
+  "entities_CREDIT_CARD": {
+    "message": "carte di credito"
+  }
+}

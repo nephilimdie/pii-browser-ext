@@ -5,13 +5,14 @@ import { Window } from 'happy-dom';
 
 // "Screenshot protetto": crop math, output routing, fail-closed redaction and the
 // service-worker start (activeTab capture + on-demand injection).
-const src = name => readFile(new URL(`../src/${name}`, import.meta.url), 'utf8');
-const [composerSrc, guardSrc, shotSrc, bgSrc] = await Promise.all(['composer.js', 'image-guard.js', 'screenshot.js', 'background.js'].map(src));
+import { src, i18n } from './helpers/env.mjs';
+const [composerSrc, guardSrc, shotSrc, bgSrc, coreSrc, panelSrc] = await Promise.all(['composer.js', 'image-guard.js', 'screenshot.js', 'background.js', 'core.js', 'panel.js'].map(src));
+const it = await i18n('it');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // Pure module in a bare context (no DOM: the overlay wiring stays off).
-const pure = vm.createContext({ atob, btoa, Blob, File, Uint8Array, Promise, setTimeout });
-for (const s of [composerSrc, guardSrc, shotSrc]) vm.runInContext(s, pure);
+const pure = vm.createContext({ atob, btoa, Blob, File, Uint8Array, Promise, setTimeout, chrome: { i18n: it } });
+for (const s of [coreSrc, composerSrc, guardSrc, shotSrc]) vm.runInContext(s, pure);
 const S = pure.PseudoraScreenshot;
 const C = pure.PseudoraComposer;
 const plain = o => (o ? { ...o } : o);
@@ -138,24 +139,33 @@ const plain = o => (o ? { ...o } : o);
   document.querySelector('textarea').getClientRects = () => [{}];
   const sent = [];
   window.chrome = {
-    runtime: { id: 'ext', lastError: null, sendMessage(m, cb) { sent.push(m); cb({}); }, onMessage: { addListener() {} } },
+    i18n: it,
+    runtime: { id: 'ext', lastError: null, getURL: p => p, sendMessage(m, cb) { if (m.type !== 'GET_DOC_TYPES') sent.push(m); cb({}); }, onMessage: { addListener() {} } },
     storage: { sync: { get(d, cb) { cb({ ...d, interceptSend: true, protectImages: true }); } }, onChanged: { addListener() {} } },
   };
+  window.eval(coreSrc);
   window.eval(composerSrc);
+  window.eval(panelSrc);
   window.eval(guardSrc);
   window.eval(shotSrc);
   const got = [];
+  let showThumb = true;
   window.addEventListener('paste', ev => {
     got.push([...ev.clipboardData.files].map(f => f.name));
-    document.getElementById('att').appendChild(document.createElement('img'));   // site shows a thumbnail
+    if (showThumb) document.getElementById('att').appendChild(document.createElement('img'));   // site shows a thumbnail
   });
   const G = window.PseudoraImageGuard;
   G.timing.verifyMs = 60; G.timing.pollMs = 10;
   assert.equal(window.PseudoraScreenshot.route({ site: window.PseudoraComposer.forHost('chatgpt.com'), hasComposer: true }), 'attach');
-  assert.equal(G.attach([new window.File(['redacted'], 'screenshot-protetto.png', { type: 'image/png' })]), true);
-  await sleep(40);
+  assert.equal(await G.attach([new window.File(['redacted'], 'screenshot-protetto.png', { type: 'image/png' })]), true, 'resolves once the site shows it');
   assert.deepEqual(got, [['screenshot-protetto.png']]);
   assert.equal(sent.length, 0, 'the protected copy is not sent to the Cloud again');
+  assert.equal(document.getElementById('pii-main-panel'), null, 'one notification channel: no image panel next to the toast');
+
+  // The site never shows the attachment: resolves false, still no panel (the toast reports the clipboard copy).
+  showThumb = false;
+  assert.equal(await G.attach([new window.File(['redacted'], 'b.png', { type: 'image/png' })]), false);
+  assert.equal(document.getElementById('pii-main-panel'), null);
 
   // No composer on the page: attach refuses, so the caller falls back to the clipboard.
   document.querySelector('form').remove();
@@ -165,8 +175,8 @@ const plain = o => (o ? { ...o } : o);
 // Gemini and other sites: no attach hook, so screenshots go to the clipboard.
 {
   const window = new Window({ url: 'https://example.com/' });
-  window.chrome = { runtime: { id: 'ext', onMessage: { addListener() {} } }, storage: { sync: { get() {} }, onChanged: { addListener() {} } } };
-  window.eval(composerSrc); window.eval(guardSrc); window.eval(shotSrc);
+  window.chrome = { i18n: it, runtime: { id: 'ext', onMessage: { addListener() {} } }, storage: { sync: { get() {} }, onChanged: { addListener() {} } } };
+  window.eval(coreSrc); window.eval(composerSrc); window.eval(guardSrc); window.eval(shotSrc);
   assert.equal(window.PseudoraImageGuard.attach([]), false);
 }
 
@@ -203,13 +213,13 @@ const plain = o => (o ? { ...o } : o);
   reset(logged);
   assert.equal((await start()).ok, true);
   assert.deepEqual(calls.map(c => c[0]), ['probe', 'inject', 'capture', 'send']);
-  assert.deepEqual([...calls[1][1]], ['src/composer.js', 'src/image-guard.js', 'src/screenshot.js']);
+  assert.deepEqual([...calls[1][1]], ['src/core.js', 'src/composer.js', 'src/image-guard.js', 'src/screenshot.js']);
   assert.deepEqual(calls[2], ['capture', 3, 'png']);
   assert.equal(calls[3][2].type, 'SCREENSHOT_START');
   assert.equal(calls[3][2].dataUrl, 'data:image/png;base64,AAAA');
 
   // ChatGPT/Claude with the manifest content scripts: nothing re-injected (no duplicate paste guard).
-  reset(logged, ['PseudoraComposer', 'PseudoraImageGuard', 'PseudoraScreenshot']);
+  reset(logged, ['PseudoraCore', 'PseudoraComposer', 'PseudoraImageGuard', 'PseudoraScreenshot']);
   await start();
   assert.deepEqual(calls.map(c => c[0]), ['probe', 'capture', 'send']);
 
