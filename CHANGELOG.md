@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.1] - 2026-11-09
+
+### Added
+- Confirmed image detections are listed by type (for example PERSON and FISCAL_CODE) in the protected-image review. They remain covered by default and can be shown individually after confirmation.
+- Revealing one detection keeps overlapping protected areas hidden. The sensitive review layer is available only to the extension-owned editor, never to page content scripts.
+
+### Changed
+- OCR text masks follow nearby words rather than spanning distant columns; uncertain and user-drawn areas remain independently controllable.
+
 ## [1.4.0] - 2026-11-09
 
 ### Added
