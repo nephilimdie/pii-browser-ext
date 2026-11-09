@@ -5,7 +5,7 @@ import { Window } from 'happy-dom';
 // Content-side image guard on a fake ChatGPT composer: originals are swallowed in the
 // capture phase, only the Cloud-confirmed copy reaches the site, failures fail closed.
 import { src, i18n } from './helpers/env.mjs';
-const [composerSource, source, coreSource, panelSource] = await Promise.all(['composer.js', 'image-guard.js', 'core.js', 'panel.js'].map(src));
+const [composerSource, source, coreSource, panelSource, reviewSource] = await Promise.all(['composer.js', 'image-guard.js', 'core.js', 'panel.js', 'review-editor.js'].map(src));
 const it = await i18n('it');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const REDACTED_B64 = Buffer.from('redacted-bytes').toString('base64');
@@ -38,6 +38,7 @@ function boot({ host = 'chatgpt.com', sync = { interceptSend: true, protectImage
   window.eval(coreSource);
   window.eval(composerSource);
   window.eval(panelSource);
+  window.eval(reviewSource);
   window.eval(source);
   const site = [];                                   // what the page's own handlers receive
   const files = ev => [...(ev.clipboardData || ev.dataTransfer || ev.target).files].map(f => f.name);
@@ -68,9 +69,13 @@ const okReply = { safe: true, format: 'png', image_base64: REDACTED_B64, entity_
   assert.equal(guard.classify(file('a.heic', 'image/heic')), 'heic');
   assert.equal(guard.classify(file('IMG_1.HEIC', '')), 'heic');
   assert.equal(guard.classify(file('a.gif', 'image/gif')), 'unsupported');
-  assert.equal(guard.classify(file('a.pdf', 'application/pdf')), 'other');
-  assert.equal(guard.plan([file('a.pdf', 'application/pdf')]).blocked, 'unsupported_file');
-  assert.equal(guard.plan([file('a.png', 'image/png'), file('a.pdf', 'application/pdf')]).blocked, 'unsupported_file');
+  assert.equal(guard.classify(file('a.pdf', 'application/pdf')), 'document');
+  assert.equal(guard.classify(file('Atto.DOCX', '')), 'document');
+  assert.equal(guard.classify(file('a.zip', 'application/zip')), 'other');
+  assert.equal(guard.plan([file('a.pdf', 'application/pdf')]).blocked, null);
+  assert.equal(guard.plan([file('a.png', 'image/png'), file('a.pdf', 'application/pdf')]).documents.length, 1);
+  assert.equal(guard.plan([file('a.png', 'image/png'), file('a.zip', 'application/zip')]).blocked, 'unsupported_file');
+  assert.equal(guard.plan([file('a.zip', 'application/zip')]), null, 'nothing to protect: the site gets it as before');
   assert.equal(guard.plan([file('a.png', 'image/png'), file('b.heic', 'image/heic')]).blocked, 'heic');
   assert.equal(guard.validResult({ ...okReply, safe: 'true' }), false);
   assert.equal(guard.validResult({ ...okReply, format: 'gif' }), false);
@@ -91,34 +96,51 @@ const okReply = { safe: true, format: 'png', image_base64: REDACTED_B64, entity_
   assert.equal(t.sent[0].format, 'png');
   assert.equal(Buffer.from(t.sent[0].data, 'base64').toString(), 'original-secret');
   assert.match(t.panel().textContent, /2 elementi: volti, IBAN/);
-  assert.match(t.panel().textContent, /1 area incerta/);
-  assert.ok(t.panel().querySelector('img.pii-img-preview'));
-  // Same shell as the text panel: a labelled dialog; the preview opens a zoom view.
+  assert.equal(t.sent[0].visible, true, 'the panel has the editor: uncertain areas may come back visible');
+  assert.ok(t.panel().querySelector('.pii-rev img.pii-rev-img'), 'editor preview');
+  // Same shell as the text panel: a labelled dialog.
   assert.equal(t.panel().getAttribute('role'), 'dialog');
   assert.ok(t.panel().getAttribute('aria-labelledby'));
-  t.panel().querySelector('.pii-img-figure').click();
-  assert.ok(t.panel().querySelector('.pii-zoom img'), 'click-to-zoom');
-  t.panel().querySelector('.pii-zoom').dispatchEvent(new t.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-  assert.equal(t.panel().querySelector('.pii-zoom'), null, 'Esc closes the zoom first');
-  assert.ok(t.panel(), 'the panel stays open');
   // the site renders an attachment thumbnail when it receives the protected file
   t.window.addEventListener('paste', () => t.document.getElementById('att').appendChild(t.document.createElement('img')));
   t.click('Usa immagine protetta');
+  await sleep(5);
   assert.deepEqual(t.site, [['paste', ['immagine-protetta-1.png']]], 'only the protected copy reaches the site');
   await sleep(40);
   assert.equal(t.panel(), null, 'panel closes once the attachment shows up');
   assert.equal(t.network(), 0, 'content script made no network call');
 }
 
-// Doubtful areas are outlined on the preview at their relative position.
+// Uncertain areas come back visible: outlined at their position, with the note; Copri toggles.
 {
-  const t = boot({ reply: { ...okReply, review_boxes: [[0.1, 0.2, 0.5, 0.4]] } });
+  const t = boot({ reply: { ...okReply, review_default: 'visible', review_areas: [{ id: 3, reason: 'low_confidence', bbox: [0.1, 0.2, 0.5, 0.4] }] } });
   t.paste([t.file('a.png', 'image/png')]);
   await sleep(20);
-  const box = t.panel().querySelector('.pii-img-frame .pii-review-box');
+  const box = t.panel().querySelector('.pii-rev-box.is-visible');
   assert.equal(box.style.left, '10%');
   assert.equal(box.style.width, '40%');
-  assert.equal(box.textContent, '1');
+  assert.match(box.textContent, /1 · Visibile/);
+  assert.match(t.panel().textContent, /visibili per impostazione predefinita/);
+  box.click();
+  assert.ok(t.panel().querySelector('.pii-rev-box.is-covered'), 'clicking the overlay covers it');
+  assert.match(t.panel().textContent, /0 visibili · 1 coperte/);
+}
+
+// A PDF dropped in the composer is protected through REDACT_DOCUMENT; only the protected copy reaches the site.
+{
+  const docReply = msg => (msg.type === 'REDACT_DOCUMENT'
+    ? { safe: true, kind: 'pdf', type: 'application/pdf', name: 'notes-protetto.pdf', data: Buffer.from('%PDF-red').toString('base64'), entity_count: 2, types: ['PERSON'] }
+    : okReply);
+  const t = boot({ reply: docReply });
+  const ev = t.paste([t.file('notes.pdf', 'application/pdf')]);
+  assert.equal(ev.defaultPrevented, true);
+  await sleep(20);
+  assert.equal(t.sent[0].type, 'REDACT_DOCUMENT');
+  assert.equal(t.sent[0].name, 'notes.pdf');
+  assert.match(t.panel().textContent, /File protetto: notes-protetto\.pdf/);
+  t.click('Usa immagine protetta');
+  await sleep(10);
+  assert.deepEqual(t.site, [['paste', ['notes-protetto.pdf']]]);
 }
 
 // Annulla on review: nothing reaches the site.
@@ -194,10 +216,10 @@ for (const reply of [{ error: 'Pseudora: HTTP 503', responseCode: 'unavailable' 
   assert.equal(t.site.length, 1);
 }
 
-// Non-image files are blocked while protection is active; never forward originals silently.
+// A file Pseudora cannot protect never rides along with protected ones.
 {
   const t = boot({ reply: okReply });
-  const ev = t.paste([t.file('notes.pdf', 'application/pdf')]);
+  const ev = t.paste([t.file('a.png', 'image/png'), t.file('notes.zip', 'application/zip')]);
   assert.equal(ev.defaultPrevented, true);
   assert.equal(t.sent.length, 0);
   assert.deepEqual(t.site, []);
@@ -227,6 +249,7 @@ for (const reply of [{ error: 'Pseudora: HTTP 503', responseCode: 'unavailable' 
   await sleep(20);
   assert.equal(u.sent[0].format, 'jpeg');
   u.click('Usa immagine protetta');
+  await sleep(5);
   assert.deepEqual(u.site.at(-1), ['change', ['immagine-protetta-1.png']]);
 }
 

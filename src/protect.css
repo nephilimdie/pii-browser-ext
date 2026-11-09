@@ -1,0 +1,10 @@
+/* "Carica file" page: one column, the shared panel/editor styles from content.css. */
+body.protect { margin: 0; background: var(--pii-paper); color: var(--pii-ink); font: 14px/1.5 var(--pii-font); }
+.protect-main { max-width: 880px; margin: 0 auto; padding: 32px 20px 48px; display: grid; gap: 16px; }
+.protect-main h1 { margin: 0; font-size: 22px; }
+.protect-lead { margin: 0; color: var(--pii-slate); }
+.protect-drop { display: grid; place-items: center; min-height: 160px; padding: 24px; border: 2px dashed var(--pii-line-strong);
+  border-radius: 16px; background: var(--pii-surface); color: var(--pii-slate); font-weight: 600; cursor: pointer; text-align: center; }
+.protect-drop.is-over, .protect-drop:focus-within { border-color: var(--pii-indigo); background: var(--pii-wash); }
+.protect-drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.protect-actions { flex-wrap: wrap; }

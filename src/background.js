@@ -8,7 +8,7 @@
 
 // Shared pure logic (document type, error kinds, i18n). Absent only in Node tests.
 const loadScript = /** @type {any} */ (globalThis).importScripts;
-if (typeof loadScript === 'function') loadScript.call(globalThis, 'core.js');
+if (typeof loadScript === 'function') loadScript.call(globalThis, 'core.js', 'bg-files.js');
 const core = () => globalThis.PseudoraCore;
 
 // ── Message router ────────────────────────────────────────────────────────────
@@ -37,6 +37,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     SELECT_TEAM:           () => handleSelectTeam(msg),
     GET_TEAMS:             () => getTeams(),
     REDACT_IMAGE:          () => handleRedactImage(msg),
+    REDACT_DOCUMENT:       () => globalThis.PseudoraFiles.redactDocument(msg),
+    OPEN_PROTECT:          () => globalThis.PseudoraFiles.openProtect(msg),
+    TAKE_PROTECT_JOB:      () => globalThis.PseudoraFiles.takeJob(msg),
     START_SCREENSHOT:      () => startScreenshot(msg.tabId, msg.windowId),
   };
 
@@ -497,7 +500,7 @@ async function openLogin() {
 /** @typedef {import('./generated/pseudora-api').components['schemas']} Schemas */
 
 const API_TIMEOUT_MS = 30_000;
-/** The fast image contract analyzes once; keep headroom for older Cloud versions. */
+/** One analysis since Cloud 2026-11-09; headroom for older Clouds (preview + redact). */
 const IMAGE_TIMEOUT_MS = 150_000;
 const IMAGE_FORMATS = ['png', 'jpeg', 'webp'];
 
@@ -541,9 +544,13 @@ function postJson(baseUrl, path, headers, body) {
  *       safe: true, a supported format, intact image bytes and sane counts; any HTTP error,
  *       timeout or malformed reply rejects with a `responseCode` (fail closed).
  * Test: tests/image-background.mjs (multipart fields, Accept, fail-closed shapes).
- * @param {{ data: string, format: string }} msg
+ *       `visible: true` (only flows with the uncertain-areas editor) asks for review_default=visible
+ *       and returns the echoed mode and the validated areas [{id, reason, bbox}]; an older Cloud
+ *       that does not echo it covered every area (mode 'cover'). Without the editor (screenshot
+ *       shortcut) uncertain areas stay covered by the server.
+ * @param {{ data: string, format: string, visible?: boolean }} msg
  */
-async function handleRedactImage({ data, format }) {
+async function handleRedactImage({ data, format, visible = false }) {
   const s = await getSettings();
   if (!s.piiApiUrl) throw Object.assign(new Error('API URL not configured.'), { responseCode: 'not_configured' });
   if (typeof data !== 'string' || !data || !IMAGE_FORMATS.includes(format)) {
@@ -559,10 +566,7 @@ async function handleRedactImage({ data, format }) {
   form.append('file', new Blob([bytes], { type: `image/${format}` }), `image.${format === 'jpeg' ? 'jpg' : format}`);
   form.append('domain', core()?.requestFor(s.docType).image || 'generic_professional');
   form.append('face_style', FACE_STYLES.includes(s.faceStyle) ? s.faceStyle : FACE_STYLES[0]);
-  // The Cloud's fast path returns protected pixels and review boxes in one analysis.
-  // Legacy servers ignore `fast` and still paint uncertain regions by default.
-  form.append('fast', '1');
-  form.append('review_default', 'cover');
+  form.append('review_default', visible === true ? 'visible' : 'cover');
 
   // The Cloud negotiates on Accept: without it the reply is raw image bytes, which this JSON parser refuses.
   const r = await post(s.piiApiUrl, '/v1/images/redact', { headers: { ...headers, Accept: 'application/json' }, body: form }, IMAGE_TIMEOUT_MS);
@@ -594,27 +598,18 @@ async function handleRedactImage({ data, format }) {
     throw Object.assign(new Error('Pseudora returned invalid counts.'), { responseCode: 'failed' });
   }
   const reviewCount = result.review_regions;
-  const boxes = reviewBoxes(result.review_areas || result.review?.regions);
-  if (result.review_default === 'visible') {
+  const areas = globalThis.PseudoraFiles.reviewAreas(result.review_areas);
+  const mode = result.review_default === 'visible' ? 'visible' : 'cover';
+  // Areas left visible are only acceptable when this flow asked for them and can show them all.
+  if (mode === 'visible' && (visible !== true || (Number.isSafeInteger(reviewCount) && reviewCount !== areas.length))) {
     throw Object.assign(new Error('Pseudora returned unreviewed areas.'), { responseCode: 'failed' });
   }
   return {
     safe: true, format: out, image_base64: result.image_base64,
     entity_count: result.entity_count, review_regions: Number.isSafeInteger(reviewCount) ? reviewCount : 0,
-    review_default: result.review_default === 'visible' ? 'visible' : 'cover',
-    types, review_boxes: boxes,
+    review_default: mode, review_areas: areas,
+    types, review_boxes: areas.map(a => [...a.bbox]),
   };
-}
-
-/**
- * Why: the preview outlines doubtful areas; only their geometry may reach the page.
- * What: up to 200 [x0, y0, x1, y1] fraction boxes (0..1, x0<x1, y0<y1); anything else dropped.
- * Test: tests/image-background.mjs, review layer image never returned, bad boxes filtered.
- */
-function reviewBoxes(regions) {
-  regions = Array.isArray(regions) ? regions.slice(0, 200) : [];
-  return regions.map(r => r?.bbox).filter(b => Array.isArray(b) && b.length === 4
-    && b.every(v => typeof v === 'number' && v >= 0 && v <= 1) && b[0] < b[2] && b[1] < b[3]).map(b => [...b]);
 }
 
 /** Face styles the Cloud accepts, the default (irreversible blur) first. */

@@ -124,7 +124,6 @@
     panel.addEventListener('keydown', e => {
       if (e.key !== 'Escape') return;
       e.stopPropagation();
-      if (panel.querySelector('.pii-zoom')) return;           // the zoom view handles its own Esc
       close(owner, 'dismissed');
     });
 
@@ -157,40 +156,11 @@
     return true;
   }
 
-  /** Full-size view of an image inside the panel; Esc or a click closes it. */
-  function zoom(src, alt, boxes = []) {
-    const host = current?.panel;
-    if (!host) return;
-    const layer = el('div', 'pii-zoom');
-    layer.setAttribute('role', 'dialog');
-    layer.setAttribute('aria-label', t('imgZoomTitle'));
-    const frame = el('div', 'pii-zoom-frame');
-    const img = el('img');
-    img.src = src; img.alt = alt;
-    frame.appendChild(img);
-    boxes.forEach((b, i) => frame.appendChild(marker(b, i)));
-    const closeBtn = button(t('imgZoomClose'), 'secondary', () => done());
-    layer.append(frame, closeBtn);
-    const done = () => { layer.remove(); host.querySelector('.pii-img-figure')?.focus(); };
-    layer.addEventListener('click', e => { if (e.target === layer || e.target === frame || e.target === img) done(); });
-    layer.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); done(); } });
-    host.appendChild(layer);
-    closeBtn.focus();
-  }
-
-  /** Dashed outline for a doubtful region, [x0, y0, x1, y1] as fractions of the image. */
-  function marker([x0, y0, x1, y1], i) {
-    const m = el('span', 'pii-review-box');
-    Object.assign(m.style, { left: `${x0 * 100}%`, top: `${y0 * 100}%`, width: `${(x1 - x0) * 100}%`, height: `${(y1 - y0) * 100}%` });
-    m.appendChild(el('span', 'pii-review-num', String(i + 1)));
-    return m;
-  }
-
   window.addEventListener('resize', reposition);
   globalThis.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change', syncTheme);
 
   globalThis.PseudoraPanel = Object.freeze({
-    open, close, reposition, syncTheme, pageTheme, button, el, zoom, marker,
+    open, close, reposition, syncTheme, pageTheme, button, el,
     owner: () => current?.owner || null,
     isOpen: owner => !!current && (!owner || current.owner === owner),
   });

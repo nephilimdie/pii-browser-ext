@@ -1,6 +1,8 @@
 /**
- * Image protection: images pasted, dropped or picked in the ChatGPT / Claude
- * composer are redacted by Pseudora before the site can upload them.
+ * Image and document protection: images (and PDF/DOCX/TXT files) pasted, dropped or picked
+ * in the ChatGPT / Claude composer are redacted by Pseudora before the site can upload them.
+ * Uncertain image areas come back visible; the panel's editor (src/review-editor.js) lets the
+ * user cover them or draw more, and the covered boxes are burned into the pixels on "Usa".
  * Pure decisions live in `PseudoraImageGuard` (tested in Node); the DOM wiring
  * at the bottom only runs on the supported sites. Loaded before content.js.
  * Fail closed: the original image is swallowed in the capture phase and only a
@@ -12,8 +14,11 @@
   const FORMATS = { 'image/png': 'png', 'image/jpeg': 'jpeg', 'image/jpg': 'jpeg', 'image/webp': 'webp' };
   const EXTENSIONS = { png: 'png', jpg: 'jpeg', jpeg: 'jpeg', webp: 'webp' };
   const HEIC = /^image\/hei[cf]|\.(heic|heif)$/i;
+  const DOCUMENTS = { 'application/pdf': 'pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx', 'text/plain': 'txt' };
+  const DOC_EXT = /\.(pdf|docx|txt)$/i;
   const MAX_IMAGES = 4;
   const MAX_BYTES = 10_000_000;
+  const MAX_DOC_BYTES = 20_000_000;
   const t = (key, subs) => globalThis.PseudoraCore.t(key, subs);
   // Refusal reasons with their own message (img_<code> in _locales); anything else is img_failed.
   const CODES = ['heic', 'unsupported', 'unsupported_file', 'too_many', 'too_large', 'image_too_large', 'image_unsupported', 'invalid_document',
@@ -22,7 +27,8 @@
 
   /**
    * Why: only formats the Cloud redacts may be offered to it; a HEIC photo needs its own hint.
-   * What: 'image' (png/jpeg/webp), 'heic', 'unsupported' (any other image/*) or 'other'.
+   * What: 'image' (png/jpeg/webp), 'document' (pdf/docx/txt), 'heic', 'unsupported' (any other
+   *       image/*) or 'other'.
    * Test: tests/image-guard.mjs, {type:'', name:'a.JPG'} is 'image', image/heic is 'heic'.
    */
   function classify(file) {
@@ -30,6 +36,7 @@
     const ext = String(file?.name || '').toLowerCase().split('.').pop();
     if (HEIC.test(type) || HEIC.test(file?.name || '')) return 'heic';
     if (FORMATS[type] || (!type && EXTENSIONS[ext])) return 'image';
+    if (DOCUMENTS[type] || ((!type || type === 'application/octet-stream') && DOC_EXT.test(file?.name || ''))) return 'document';
     return type.startsWith('image/') ? 'unsupported' : 'other';
   }
 
@@ -40,21 +47,23 @@
 
   /**
    * Why: one event can mix images, other files and refused formats; the decision must be total.
-   * What: { images, others, blocked } where blocked is an img_<code> message code or null.
-   *       Non-image files cannot be safely transformed by this guard and must never ride
-   *       along with protected images into the chat.
+   * What: { images, documents, blocked } where blocked is an img_<code> message code or null;
+   *       null when there is nothing Pseudora can protect (other files alone pass as before).
+   *       A file Pseudora cannot transform never rides along with protected ones.
+   * Test: [png, pdf] → 1 image, 1 document; [png, zip] → blocked 'unsupported_file'; [zip] → null.
    */
   function plan(files) {
     const list = [...(files || [])];
     const kinds = list.map(classify);
-    if (!list.length) return null;
+    if (!kinds.some(k => k !== 'other')) return null;
     const blocked = kinds.includes('heic') ? 'heic' : kinds.includes('unsupported') ? 'unsupported' : null;
     const images = list.filter((_, i) => kinds[i] === 'image');
+    const documents = list.filter((_, i) => kinds[i] === 'document');
     return {
-      images,
-      others: list.filter((_, i) => kinds[i] === 'other'),
+      images, documents,
       blocked: blocked || (kinds.includes('other') ? 'unsupported_file'
-        : images.length > MAX_IMAGES ? 'too_many' : images.some(f => f.size > MAX_BYTES) ? 'too_large' : null),
+        : images.length + documents.length > MAX_IMAGES ? 'too_many'
+          : images.some(f => f.size > MAX_BYTES) || documents.some(f => f.size > MAX_DOC_BYTES) ? 'too_large' : null),
     };
   }
 
@@ -212,6 +221,17 @@
     return deliver(files, { origin: 'paste', target: input }, { quiet: true });   // bypass: not intercepted again
   };
 
+  // src/protect.html hands already-protected files (images burned, documents redacted) to this tab.
+  chrome.runtime.onMessage?.addListener((msg, sender, sendResponse) => {
+    if (sender.id !== chrome.runtime.id || msg?.type !== 'PSEUDORA_ATTACH' || !Array.isArray(msg.files)) return false;
+    const files = msg.files.slice(0, MAX_IMAGES).filter(f => typeof f?.data === 'string' && typeof f.name === 'string')
+      .map(f => new File([base64ToBytes(f.data)], f.name.slice(0, 80), { type: String(f.type || '') }))
+      .filter(f => ['image', 'document'].includes(classify(f)));
+    if (!files.length) { sendResponse({ ok: false }); return false; }
+    Promise.resolve(attachImpl(files)).then(ok => sendResponse({ ok: !!ok }), () => sendResponse({ ok: false }));
+    return true;
+  });
+
   window.addEventListener('paste', onPaste, true);
   window.addEventListener('drop', onDrop, true);
   window.addEventListener('input', onFileInput, true);
@@ -226,15 +246,30 @@
     try {
       const results = [];
       for (const file of p.images) {
-        const resp = await safeSend({ type: 'REDACT_IMAGE', data: await fileToBase64(file), format: formatOf(file) });
+        const resp = await safeSend({ type: 'REDACT_IMAGE', data: await fileToBase64(file), format: formatOf(file), visible: true });
         if (cancelled.value) return;
         if (resp?.error || !validResult(resp)) { showPanel({ error: describeError(resp) }); return; }
         results.push(resp);
       }
+      const docs = [];
+      for (const file of p.documents) {
+        const resp = await safeSend({ type: 'REDACT_DOCUMENT', data: await fileToBase64(file), name: file.name });
+        if (cancelled.value) return;
+        if (resp?.error || resp?.safe !== true || typeof resp.data !== 'string') { showPanel({ error: describeError(resp) }); return; }
+        docs.push(resp);
+      }
       const files = results.map((r, i) => new File([base64ToBytes(r.image_base64)], protectedName(r.format, i + 1), { type: `image/${r.format}` }));
+      const docFiles = docs.map(d => new File([base64ToBytes(d.data)], d.name, { type: d.type }));
+      const states = results.map(r => globalThis.PseudoraReview.createState(r));
       showPanel({
-        results, files,
-        onUse: () => deliver(files, ctx),
+        results: [...results, ...docs], files, docFiles, states,
+        onUse: async () => {
+          try {
+            const burned = await Promise.all(files.map(async (f, i) => new File(
+              [await globalThis.PseudoraReview.burn(f, results[i].format, states[i])], f.name, { type: f.type })));
+            return deliver([...burned, ...docFiles], ctx);
+          } catch (_) { showPanel({ error: describeError('failed') }); return false; }
+        },
       });
     } catch (_) {
       if (!cancelled.value) showPanel({ error: describeError('failed') });
@@ -337,27 +372,14 @@
 
   function revokePreviews() { previews.splice(0).forEach(u => URL.revokeObjectURL(u)); }
 
-  function preview(file, boxes) {
+  /** The uncertain-areas editor for one protected image (preview URL revoked with the panel). */
+  function editor(body, file, state) {
     const url = URL.createObjectURL(file);
     previews.push(url);
-    const fig = UI().el('figure', 'pii-img-figure');
-    fig.tabIndex = 0;
-    fig.setAttribute('role', 'button');
-    fig.setAttribute('aria-label', t('imgZoomOpen'));
-    const frame = UI().el('div', 'pii-img-frame');
-    const img = UI().el('img', 'pii-img-preview');
-    img.src = url; img.alt = t('imgPreviewAlt');
-    frame.appendChild(img);
-    boxes.forEach((b, i) => frame.appendChild(UI().marker(b, i)));
-    const cap = UI().el('figcaption', 'pii-img-caption', t('imgZoomOpen'));
-    fig.append(frame, cap);
-    const zoom = () => UI().zoom(url, img.alt, boxes);
-    fig.addEventListener('click', zoom);
-    fig.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); zoom(); } });
-    return fig;
+    globalThis.PseudoraReview.mount(body, { src: url, alt: t('imgPreviewAlt'), state });
   }
 
-  function showPanel({ loading, error, results, files, onUse, onCancel, fallback, status }) {
+  function showPanel({ loading, error, results, files, docFiles, states, onUse, onCancel, fallback, status }) {
     const ui = UI();
     if (!ui) return;
     revokePreviews();
@@ -391,13 +413,12 @@
       const box = ui.el('div', 'pii-notice is-policy pii-img-error');
       box.append(ui.el('p', 'pii-notice-title', t('imgFallbackTitle')), ui.el('p', 'pii-notice-detail', t('imgFallback')));
       alert.appendChild(box);
-      fallback.filter(f => classify(f) === 'image').forEach(f => row.appendChild(ui.button(t('imgDownload', { name: f.name }), '', () => download(f))));
+      fallback.filter(f => ['image', 'document'].includes(classify(f))).forEach(f => row.appendChild(ui.button(t('imgDownload', { name: f.name }), '', () => download(f))));
       row.appendChild(closeBtn(t('actionClose')));
     } else {
-      files.forEach((f, i) => body.appendChild(preview(f, results[i]?.review_boxes || [])));
+      files.forEach((f, i) => editor(body, f, states[i]));
+      (docFiles || []).forEach(f => body.appendChild(ui.el('p', 'pii-img-doc', t('fileProtected', { name: f.name }))));
       body.appendChild(ui.el('p', 'pii-img-summary', t('imgSummary', { summary: summarize(results) })));
-      const review = results.reduce((n, r) => n + (Number(r.review_regions) || 0), 0);
-      if (review) body.appendChild(ui.el('p', 'pii-hint pii-img-note', t(review === 1 ? 'imgReviewOne' : 'imgReviewMany', { n: review })));
       const use = ui.button(t('imgUse'), '', () => onUse());
       use.classList.add('pii-img-use');
       row.append(use, closeBtn(t('actionCancel')));
