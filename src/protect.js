@@ -21,6 +21,7 @@
   let job = { source: '', kind: '', tabId: null };
   let current = null;   // { file: File (deliverable, before burn), kind: 'image'|'document', state?, format? }
   let editorUrl = null;
+  let previewSeq = 0;
 
   const send = msg => new Promise(resolve => {
     try { chrome.runtime.sendMessage(msg, r => resolve(chrome.runtime.lastError ? { error: chrome.runtime.lastError.message } : r)); }
@@ -72,10 +73,12 @@
         if (!blob) return fail('unsupported');
         if (blob.size > 10_000_000) return fail('too_large');
         const format = IMAGE_TYPES[blob.type] || 'png';
-        const resp = await send({ type: 'REDACT_IMAGE', data: toBase64(new Uint8Array(await blob.arrayBuffer())), format, visible: true });
+        const resp = await send({ type: 'REDACT_IMAGE', data: toBase64(new Uint8Array(await blob.arrayBuffer())), format, visible: true, confirmed: true });
         if (resp?.error || resp?.safe !== true || typeof resp.image_base64 !== 'string') return fail(resp?.responseCode);
         const out = new File([fromBase64(resp.image_base64)], `immagine-protetta.${resp.format === 'jpeg' ? 'jpg' : resp.format}`, { type: `image/${resp.format}` });
-        current = { kind: 'image', file: out, format: resp.format, state: R.createState(resp), results: [resp] };
+        const layer = resp.confirmed_review
+          ? new Blob([fromBase64(resp.confirmed_review.image_base64)], { type: `image/${resp.format}` }) : null;
+        current = { kind: 'image', file: out, layer, format: resp.format, state: R.createState(resp), results: [resp] };
       } else if (DOC_EXT.test(name) || ['application/pdf', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(type)) {
         const ext = (name.match(DOC_EXT) || [])[1] || { 'application/pdf': 'pdf', 'text/plain': 'txt' }[type] || 'docx';
         if (file.size > 20_000_000) return fail('too_large');
@@ -94,7 +97,17 @@
     $('editor').replaceChildren();
     if (current.kind === 'image') {
       editorUrl = URL.createObjectURL(current.file);
-      R.mount($('editor'), { src: editorUrl, state: current.state });
+      const editor = R.mount($('editor'), { src: editorUrl, state: current.state, onChange: async () => {
+        const seq = ++previewSeq;
+        try {
+          const image = await R.burn(current.file, current.format, current.state, current.layer);
+          if (seq !== previewSeq) return;
+          const next = URL.createObjectURL(image);
+          editor.setPreview(next);
+          URL.revokeObjectURL(editorUrl);
+          editorUrl = next;
+        } catch (_) { fail('failed'); }
+      } });
     } else {
       $('editor').appendChild(Object.assign(document.createElement('p'), { className: 'pii-img-doc', textContent: t('fileProtected', { name: current.file.name }) }));
     }
@@ -110,7 +123,7 @@
   /** The file to deliver: images get the covered areas burned into the server pixels. */
   async function deliverable() {
     if (current.kind !== 'image') return current.file;
-    const blob = await R.burn(current.file, current.format, current.state);
+    const blob = await R.burn(current.file, current.format, current.state, current.layer);
     return new File([blob], current.file.name, { type: blob.type });
   }
 

@@ -887,6 +887,12 @@
   "revCover": {
     "message": "Copri"
   },
+  "revConfirmedTitle": {
+    "message": "Dati riconosciuti"
+  },
+  "revConfirmReveal": {
+    "message": "Mostrare quest'area può esporre dati personali. Continuare?"
+  },
   "revUserArea": {
     "message": "Area aggiunta {n} (frecce: sposta, Maiusc+frecce: ridimensiona, Canc: rimuovi)"
   },

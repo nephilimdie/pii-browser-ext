@@ -887,6 +887,12 @@
   "revCover": {
     "message": "Cover"
   },
+  "revConfirmedTitle": {
+    "message": "Detected data"
+  },
+  "revConfirmReveal": {
+    "message": "Showing this area may expose personal data. Continue?"
+  },
   "revUserArea": {
     "message": "Added area {n} (arrows: move, Shift+arrows: resize, Delete: remove)"
   },

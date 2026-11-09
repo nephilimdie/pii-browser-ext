@@ -33,7 +33,11 @@
     const areas = (Array.isArray(reply?.review_areas) ? reply.review_areas : []).slice(0, 200)
       .filter(a => Number.isSafeInteger(a?.id) && validBox(a?.bbox))
       .map(a => ({ id: a.id, reason: REASONS.includes(a.reason) ? a.reason : 'unrecognized_ink', bbox: [...a.bbox], covered: mode !== 'visible' }));
-    return { mode, areas, user: [] };
+    const protectedAreas = (Array.isArray(reply?.protected_areas) ? reply.protected_areas : []).slice(0, 500)
+      .filter(a => typeof a?.id === 'string' && /^(text|visual):[0-9]+(?::[0-9]+)?$/.test(a.id)
+        && typeof a.type === 'string' && validBox(a.bbox))
+      .map(a => ({ id: a.id, type: a.type, bbox: [...a.bbox] }));
+    return { mode, areas, user: [], protectedAreas, canReveal: !!reply?.confirmed_review, shown: [] };
   }
 
   /** "Area incerta: testo poco leggibile" etc. */
@@ -109,17 +113,39 @@
    * Test: tests/review-editor.mjs with a canvas stub: covered rect painted, format kept.
    * @param {Blob} blob server image   @param {string} format png|jpeg|webp
    */
-  async function burn(blob, format, state) {
-    if (!state.user.length && !state.areas.some(a => a.covered)) return blob;   // nothing to add: server bytes as is
+  async function burn(blob, format, state, confirmedLayer = null) {
+    const shown = Array.isArray(state.shown) ? state.shown : [];
+    if (shown.length && (!confirmedLayer || !state.canReveal
+        || !shown.every(id => state.protectedAreas.some(a => a.id === id)))) throw new Error('invalid review selection');
+    if (!state.user.length && !state.areas.some(a => a.covered) && !shown.length) return blob;
     const bitmap = await createImageBitmap(blob);
+    let source = null;
     try {
       const list = rects(state, bitmap.width, bitmap.height);
-      if (!list.length) return blob;
+      if (shown.length) {
+        source = await createImageBitmap(confirmedLayer);
+        if (source.width !== bitmap.width || source.height !== bitmap.height) throw new Error('review size mismatch');
+      }
       const canvas = typeof OffscreenCanvas === 'function'
         ? new OffscreenCanvas(bitmap.width, bitmap.height)
         : Object.assign(document.createElement('canvas'), { width: bitmap.width, height: bitmap.height });
       const ctx = canvas.getContext('2d', { alpha: false });
       ctx.drawImage(bitmap, 0, 0);
+      for (const area of state.protectedAreas.filter(a => shown.includes(a.id))) {
+        const [x0, y0, x1, y1] = area.bbox;
+        const x = Math.floor(x0 * bitmap.width), y = Math.floor(y0 * bitmap.height);
+        const xEnd = Math.ceil(x1 * bitmap.width), yEnd = Math.ceil(y1 * bitmap.height);
+        ctx.drawImage(source, x, y, xEnd - x, yEnd - y, x, y, xEnd - x, yEnd - y);
+      }
+      for (const area of shown.length ? state.protectedAreas.filter(a => !shown.includes(a.id)) : []) {
+        const [x0, y0, x1, y1] = area.bbox;
+        const pad = area.type === 'FACE'
+          ? Math.ceil(Math.max((x1 - x0) * bitmap.width, (y1 - y0) * bitmap.height) * 0.25) : 3;
+        const x = Math.max(0, Math.floor(x0 * bitmap.width) - pad), y = Math.max(0, Math.floor(y0 * bitmap.height) - pad);
+        const w = Math.min(bitmap.width, Math.ceil(x1 * bitmap.width) + pad) - x;
+        const h = Math.min(bitmap.height, Math.ceil(y1 * bitmap.height) + pad) - y;
+        ctx.drawImage(bitmap, x, y, w, h, x, y, w, h);
+      }
       ctx.globalAlpha = 1;
       ctx.fillStyle = '#000';
       list.forEach(([x0, y0, x1, y1]) => ctx.fillRect(x0, y0, x1 - x0, y1 - y0));
@@ -130,6 +156,7 @@
       if (!out || out.type !== type) throw new Error('encode failed');
       return out;
     } finally {
+      source?.close?.();
       bitmap.close?.();
     }
   }
@@ -177,8 +204,10 @@
     count.setAttribute('aria-live', 'polite');
     const listTitle = el('p', 'pii-rev-list-title');
     const list = el('ul', 'pii-rev-list');
+    const confirmedTitle = el('p', 'pii-rev-list-title', t('revConfirmedTitle'));
+    const confirmedList = el('ul', 'pii-rev-list');
     tools.append(coverAll, showAll, draw, add);
-    root.append(note, frame, tools, count, listTitle, list);
+    root.append(note, frame, tools, count, confirmedTitle, confirmedList, listTitle, list);
     container.appendChild(root);
 
     coverAll.addEventListener('click', () => { setAll(state, true); changed(); });
@@ -234,6 +263,36 @@
         b.addEventListener('click', e => { if (drawing) return; e.stopPropagation(); toggle(state, a.id); changed(); });
         layer.appendChild(b);
       });
+      state.protectedAreas.forEach(a => {
+        const shown = state.shown.includes(a.id);
+        const b = el('button', `pii-rev-box is-confirmed ${shown ? 'is-visible' : 'is-covered'}`);
+        b.type = 'button'; b.disabled = !state.canReveal;
+        place(b, a.bbox);
+        b.setAttribute('aria-label', `${a.type}: ${t(shown ? 'revVisible' : 'revCovered')}`);
+        b.appendChild(el('span', 'pii-rev-tag', a.type));
+        b.addEventListener('click', e => {
+          if (drawing) return;
+          e.stopPropagation();
+          if (shown) state.shown = state.shown.filter(id => id !== a.id);
+          else if (globalThis.confirm(t('revConfirmReveal'))) state.shown.push(a.id);
+          changed();
+        });
+        layer.appendChild(b);
+      });
+      confirmedTitle.hidden = confirmedList.hidden = !state.protectedAreas.length;
+      confirmedList.replaceChildren(...state.protectedAreas.map(a => {
+        const shown = state.shown.includes(a.id);
+        const li = el('li', '', `${a.type} · ${t(shown ? 'revVisible' : 'revCovered')}`);
+        const b = el('button', 'pii-btn pii-btn-secondary', t(shown ? 'revCover' : 'revShow'));
+        b.type = 'button'; b.disabled = !state.canReveal;
+        b.addEventListener('click', () => {
+          if (shown) state.shown = state.shown.filter(id => id !== a.id);
+          else if (globalThis.confirm(t('revConfirmReveal'))) state.shown.push(a.id);
+          changed();
+        });
+        li.appendChild(b);
+        return li;
+      }));
       state.user.forEach((bbox, i) => {
         const u = el('span', 'pii-rev-box is-user is-covered');
         place(u, bbox);
@@ -268,7 +327,7 @@
       focusUser = -1;
     }
     render();
-    return { root, render };
+    return { root, render, setPreview: value => { img.src = value; } };
   }
 
   globalThis.PseudoraReview = Object.freeze({ createState, summary, setAll, toggle, boxFrom, addUser, key, rects, burn, mount, label, MAX_USER });
