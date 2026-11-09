@@ -497,7 +497,7 @@ async function openLogin() {
 /** @typedef {import('./generated/pseudora-api').components['schemas']} Schemas */
 
 const API_TIMEOUT_MS = 30_000;
-/** OCR runs twice (analysis, then redaction); the Cloud gives each pass up to 110 s. */
+/** The fast image contract analyzes once; keep headroom for older Cloud versions. */
 const IMAGE_TIMEOUT_MS = 150_000;
 const IMAGE_FORMATS = ['png', 'jpeg', 'webp'];
 
@@ -559,9 +559,10 @@ async function handleRedactImage({ data, format }) {
   form.append('file', new Blob([bytes], { type: `image/${format}` }), `image.${format === 'jpeg' ? 'jpg' : format}`);
   form.append('domain', core()?.requestFor(s.docType).image || 'generic_professional');
   form.append('face_style', FACE_STYLES.includes(s.faceStyle) ? s.faceStyle : FACE_STYLES[0]);
-  // Ask for the uncertain regions' boxes so the preview can outline them; the review
-  // image itself (doubtful areas unpainted) is dropped below and never leaves this worker.
-  form.append('review_restore', '1');
+  // The Cloud's fast path returns protected pixels and review boxes in one analysis.
+  // Legacy servers ignore `fast` and still paint uncertain regions by default.
+  form.append('fast', '1');
+  form.append('review_default', 'cover');
 
   // The Cloud negotiates on Accept: without it the reply is raw image bytes, which this JSON parser refuses.
   const r = await post(s.piiApiUrl, '/v1/images/redact', { headers: { ...headers, Accept: 'application/json' }, body: form }, IMAGE_TIMEOUT_MS);
@@ -592,10 +593,16 @@ async function handleRedactImage({ data, format }) {
   if (!types.every(type => Number.isSafeInteger(result.type_counts[type]) && result.type_counts[type] >= 0)) {
     throw Object.assign(new Error('Pseudora returned invalid counts.'), { responseCode: 'failed' });
   }
+  const reviewCount = result.review_regions;
+  const boxes = reviewBoxes(result.review_areas || result.review?.regions);
+  if (result.review_default === 'visible') {
+    throw Object.assign(new Error('Pseudora returned unreviewed areas.'), { responseCode: 'failed' });
+  }
   return {
     safe: true, format: out, image_base64: result.image_base64,
-    entity_count: result.entity_count, review_regions: Number.isSafeInteger(result.review_regions) ? result.review_regions : 0,
-    types, review_boxes: reviewBoxes(result.review),
+    entity_count: result.entity_count, review_regions: Number.isSafeInteger(reviewCount) ? reviewCount : 0,
+    review_default: result.review_default === 'visible' ? 'visible' : 'cover',
+    types, review_boxes: boxes,
   };
 }
 
@@ -604,8 +611,8 @@ async function handleRedactImage({ data, format }) {
  * What: up to 200 [x0, y0, x1, y1] fraction boxes (0..1, x0<x1, y0<y1); anything else dropped.
  * Test: tests/image-background.mjs, review layer image never returned, bad boxes filtered.
  */
-function reviewBoxes(review) {
-  const regions = Array.isArray(review?.regions) ? review.regions.slice(0, 200) : [];
+function reviewBoxes(regions) {
+  regions = Array.isArray(regions) ? regions.slice(0, 200) : [];
   return regions.map(r => r?.bbox).filter(b => Array.isArray(b) && b.length === 4
     && b.every(v => typeof v === 'number' && v >= 0 && v <= 1) && b[0] < b[2] && b[1] < b[3]).map(b => [...b]);
 }

@@ -69,7 +69,8 @@ const okReply = { safe: true, format: 'png', image_base64: REDACTED_B64, entity_
   assert.equal(guard.classify(file('IMG_1.HEIC', '')), 'heic');
   assert.equal(guard.classify(file('a.gif', 'image/gif')), 'unsupported');
   assert.equal(guard.classify(file('a.pdf', 'application/pdf')), 'other');
-  assert.equal(guard.plan([file('a.pdf', 'application/pdf')]), null);
+  assert.equal(guard.plan([file('a.pdf', 'application/pdf')]).blocked, 'unsupported_file');
+  assert.equal(guard.plan([file('a.png', 'image/png'), file('a.pdf', 'application/pdf')]).blocked, 'unsupported_file');
   assert.equal(guard.plan([file('a.png', 'image/png'), file('b.heic', 'image/heic')]).blocked, 'heic');
   assert.equal(guard.validResult({ ...okReply, safe: 'true' }), false);
   assert.equal(guard.validResult({ ...okReply, format: 'gif' }), false);
@@ -193,12 +194,13 @@ for (const reply of [{ error: 'Pseudora: HTTP 503', responseCode: 'unavailable' 
   assert.equal(t.site.length, 1);
 }
 
-// Text-only paste and non-image files pass through.
+// Non-image files are blocked while protection is active; never forward originals silently.
 {
   const t = boot({ reply: okReply });
   const ev = t.paste([t.file('notes.pdf', 'application/pdf')]);
-  assert.equal(ev.defaultPrevented, false);
+  assert.equal(ev.defaultPrevented, true);
   assert.equal(t.sent.length, 0);
+  assert.deepEqual(t.site, []);
 }
 
 // Drop and file input are intercepted too; the file input is cleared before the site reads it.

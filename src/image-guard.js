@@ -16,7 +16,7 @@
   const MAX_BYTES = 10_000_000;
   const t = (key, subs) => globalThis.PseudoraCore.t(key, subs);
   // Refusal reasons with their own message (img_<code> in _locales); anything else is img_failed.
-  const CODES = ['heic', 'unsupported', 'too_many', 'too_large', 'image_too_large', 'image_unsupported', 'invalid_document',
+  const CODES = ['heic', 'unsupported', 'unsupported_file', 'too_many', 'too_large', 'image_too_large', 'image_unsupported', 'invalid_document',
     'ocr_no_text', 'quota', 'monthly_quota_exceeded', 'in_progress', 'rate_limited', 'rate_limit_exceeded', 'busy', 'timeout',
     'unavailable', 'acl_forbidden', 'not_configured', 'network', 'failed'];
 
@@ -40,20 +40,21 @@
 
   /**
    * Why: one event can mix images, other files and refused formats; the decision must be total.
-   * What: { images, others, blocked } where blocked is an img_<code> message code or null; null when
-   *       there is nothing for Pseudora to do (no images at all).
-   * Test: [png, pdf] → 1 image, 1 other; [png, heic] → blocked 'heic'; [pdf] → null.
+   * What: { images, others, blocked } where blocked is an img_<code> message code or null.
+   *       Non-image files cannot be safely transformed by this guard and must never ride
+   *       along with protected images into the chat.
    */
   function plan(files) {
     const list = [...(files || [])];
     const kinds = list.map(classify);
-    if (!kinds.some(k => k !== 'other')) return null;
+    if (!list.length) return null;
     const blocked = kinds.includes('heic') ? 'heic' : kinds.includes('unsupported') ? 'unsupported' : null;
     const images = list.filter((_, i) => kinds[i] === 'image');
     return {
       images,
       others: list.filter((_, i) => kinds[i] === 'other'),
-      blocked: blocked || (images.length > MAX_IMAGES ? 'too_many' : images.some(f => f.size > MAX_BYTES) ? 'too_large' : null),
+      blocked: blocked || (kinds.includes('other') ? 'unsupported_file'
+        : images.length > MAX_IMAGES ? 'too_many' : images.some(f => f.size > MAX_BYTES) ? 'too_large' : null),
     };
   }
 
@@ -233,7 +234,7 @@
       const files = results.map((r, i) => new File([base64ToBytes(r.image_base64)], protectedName(r.format, i + 1), { type: `image/${r.format}` }));
       showPanel({
         results, files,
-        onUse: () => deliver([...files, ...p.others], ctx),
+        onUse: () => deliver(files, ctx),
       });
     } catch (_) {
       if (!cancelled.value) showPanel({ error: describeError('failed') });

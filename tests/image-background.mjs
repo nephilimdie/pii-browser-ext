@@ -41,7 +41,9 @@ const sent = calls[0].init.body.get('file');
 assert.equal(sent.type, 'image/png');
 assert.equal(calls[0].init.body.get('domain'), 'fine_appeal', 'document type comes from storage.sync');
 assert.equal(calls[0].init.body.get('face_style'), 'blur', 'faces blurred by default');
-assert.equal(calls[0].init.body.get('review_restore'), '1', 'asks for the doubtful boxes');
+assert.equal(calls[0].init.body.get('fast'), '1', 'single analysis image result');
+assert.equal(calls[0].init.body.get('review_default'), 'cover', 'screenshot flow cannot send visible uncertain areas');
+assert.equal(calls[0].init.body.get('review_restore'), null, 'no second render');
 assert.equal(Buffer.from(await sent.arrayBuffer()).toString(), 'original-screenshot');
 assert.equal(calls[0].init.headers.Authorization, 'Bearer t');
 assert.equal(calls[0].init.headers.Accept, 'application/json', 'without it the Cloud replies with image bytes');
@@ -49,16 +51,16 @@ assert.equal(calls[0].init.headers['Content-Type'], undefined, 'fetch must set t
 assert.ok(calls[0].init.signal instanceof AbortSignal);
 assert.deepEqual({ ...ok, types: [...ok.types], review_boxes: [...ok.review_boxes] }, {
   safe: true, format: 'png', image_base64: Buffer.from(PNG).toString('base64'),
-  entity_count: 3, review_regions: 2, types: ['PERSON', 'FACE'], review_boxes: [],
+  entity_count: 3, review_regions: 2, review_default: 'cover', types: ['PERSON', 'FACE'], review_boxes: [],
 });
 
 // Doubtful boxes: only the geometry reaches the page, never the review image.
-reply = image(PNG, { review: { content_type: 'image/png', image_base64: 'UkVWSUVX', regions: [
+reply = image(PNG, { review_areas: [
   { id: 0, reason: 'low_confidence', bbox: [0.1, 0.2, 0.3, 0.4] },
   { id: 1, reason: 'low_confidence', bbox: [0.5, 0.5, 0.4, 0.6] },          // inverted
   { id: 2, reason: 'low_confidence', bbox: [0, 0, 2, 1] },                  // out of range
   { id: 3, reason: 'low_confidence', bbox: 'x' },
-] } });
+] });
 const reviewed = await run(`handleRedactImage({ data: ${JSON.stringify(ORIGINAL)}, format: 'png' })`);
 assert.deepEqual(JSON.parse(JSON.stringify(reviewed.review_boxes)), [[0.1, 0.2, 0.3, 0.4]]);
 assert.equal(JSON.stringify(reviewed).includes('UkVWSUVX'), false, 'review layer dropped');
@@ -107,6 +109,7 @@ const failures = [
   [() => new Response('Not Found', { status: 404 }), 'unavailable'],   // Cloud without the route
   [image(PNG, { safe: false }), 'failed'],
   [image(PNG, { safe: 'true' }), 'failed'],
+  [image(PNG, { review_default: 'visible' }), 'failed'],
   [image(PNG, { image_base64: '%%%bad' }), 'failed'],
   [image(PNG, { image_base64: 'iVBORw0' }), 'failed'],          // not a multiple of 4
   [image(PNG, { type_counts: { FACE: -1 } }), 'failed'],

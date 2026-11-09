@@ -602,6 +602,9 @@
   "img_unsupported": {
     "message": "Formato immagine non supportato: converti in JPEG/PNG e riprova."
   },
+  "img_unsupported_file": {
+    "message": "Questo file non può ancora essere protetto nell'estensione. Usa Documenti su Pseudora Cloud oppure disattiva esplicitamente la protezione prima di caricarlo."
+  },
   "img_image_unsupported": {
     "message": "Formato immagine non supportato: converti in JPEG/PNG e riprova."
   },

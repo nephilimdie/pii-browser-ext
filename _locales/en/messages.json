@@ -602,6 +602,9 @@
   "img_unsupported": {
     "message": "Unsupported image format: convert to JPEG/PNG and try again."
   },
+  "img_unsupported_file": {
+    "message": "This file cannot yet be protected in the extension. Use Documents in Pseudora Cloud, or explicitly turn off protection before uploading it."
+  },
   "img_image_unsupported": {
     "message": "Unsupported image format: convert to JPEG/PNG and try again."
   },
