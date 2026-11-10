@@ -197,6 +197,9 @@
   "shotButton": {
     "message": "Screenshot protetto"
   },
+  "shotReviewRequired": {
+    "message": "Lo screenshot richiede una revisione: il motore non distingue abbastanza bene il testo dallo sfondo. Nessuna immagine è stata allegata o copiata. Riprova selezionando un'area più piccola oppure carica l'immagine in Pseudora per rivedere le aree incerte."
+  },
   "fieldTeam": {
     "message": "Team"
   },

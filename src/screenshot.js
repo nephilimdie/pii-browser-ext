@@ -61,6 +61,16 @@
     return site?.images && hasComposer ? 'attach' : 'clipboard';
   }
 
+  function needsManualReview(result) {
+    if (!Array.isArray(result.review_areas)) return result.review_regions > 0;
+    if (result.review_regions !== result.review_areas.length) return true;
+    return result.review_areas.some(area => {
+      const box = area?.bbox;
+      return Array.isArray(box) && box.length === 4
+        && (box[2] - box[0]) * (box[3] - box[1]) >= 0.8;
+    });
+  }
+
   /**
    * Why: the crop must follow the same fail-closed contract as a pasted image.
    * What: sends the PNG crop as REDACT_IMAGE; anything but a validResult() reply → error.
@@ -76,6 +86,7 @@
     const resp = await io.send({ type: 'REDACT_IMAGE', data: await G.fileToBase64(crop), format: 'png' });
     if (io.cancelled?.()) return { outcome: 'cancelled' };
     if (resp?.error || !G.validResult(resp) || resp.format !== 'png') return { outcome: 'error', message: G.describeError(resp) };
+    if (needsManualReview(resp)) return { outcome: 'error', message: t('shotReviewRequired') };
     const summary = t('imgSummary', { summary: G.summarize([resp]) });
     const file = new File([G.base64ToBytes(resp.image_base64)], 'screenshot-protetto.png', { type: 'image/png' });
     if (io.route === 'attach' && await io.attach([file])) return { outcome: 'attached', summary, file };
@@ -87,7 +98,7 @@
     }
   }
 
-  globalThis.PseudoraScreenshot = Object.freeze({ cropRect, route, protectShot, TEXT });
+  globalThis.PseudoraScreenshot = Object.freeze({ cropRect, route, needsManualReview, protectShot, TEXT });
 
   /* ── DOM wiring ───────────────────────────────────────────────────────────── */
   if (typeof document === 'undefined' || !globalThis.chrome?.runtime?.onMessage) return;
