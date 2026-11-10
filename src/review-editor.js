@@ -12,7 +12,7 @@
   if (globalThis.PseudoraReview) return;
 
   const t = (key, subs) => globalThis.PseudoraCore.t(key, subs);
-  const REASONS = ['low_confidence', 'unrecognized_ink', 'uncertain_mark'];
+  const REASONS = ['low_confidence', 'unrecognized_ink', 'uncertain_mark', 'uncertain_code'];
   const MAX_USER = 200;
   const MIN_SIDE = 0.01;
   const STEP = 0.01;

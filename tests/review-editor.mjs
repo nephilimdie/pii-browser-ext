@@ -25,6 +25,11 @@ assert.equal(old.mode, 'cover');
 assert.ok(old.areas.every(a => a.covered), 'an older server covered them: shown as covered');
 R.setAll(old, false);
 assert.ok(old.areas.every(a => a.covered), 'cannot uncover what the server painted');
+const code = R.createState({ review_default: 'visible', review_areas: [
+  { id: 7, reason: 'uncertain_code', bbox: [0, 0, 1, 1] },
+] });
+assert.equal(code.areas[0].reason, 'uncertain_code');
+assert.match(R.label(code.areas[0].reason), /codice a barre/);
 
 // Toggle / cover all / show all / summary.
 R.toggle(vis, 4);

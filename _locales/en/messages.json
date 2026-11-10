@@ -854,6 +854,9 @@
   "rev_uncertain_mark": {
     "message": "Possible signature or stamp"
   },
+  "rev_uncertain_code": {
+    "message": "Possible barcode: review before sharing"
+  },
   "revSummary": {
     "message": "{visible} visible · {covered} covered"
   },

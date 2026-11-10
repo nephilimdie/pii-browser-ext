@@ -854,6 +854,9 @@
   "rev_uncertain_mark": {
     "message": "Possibile firma o timbro"
   },
+  "rev_uncertain_code": {
+    "message": "Possibile codice a barre: controlla prima di condividere"
+  },
   "revSummary": {
     "message": "{visible} visibili · {covered} coperte"
   },
