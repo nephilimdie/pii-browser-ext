@@ -83,6 +83,15 @@ const plain = o => (o ? { ...o } : o);
   assert.equal(t.log.attached[0].name, 'screenshot-protetto.png');
   assert.equal(t.log.copied.length, 0);
 
+  // A whole-image uncertain region must never be automatically sent or copied.
+  t = io({ ...ok, review_regions: 1, review_areas: [{ id: 0, reason: 'unrecognized_ink', bbox: [0, 0, 1, 1] }] }, { route: 'attach' });
+  r = await S.protectShot(crop, t.io);
+  assert.equal(r.outcome, 'error');
+  assert.match(r.message, /revisione/);
+  assert.equal(t.log.attached.length + t.log.copied.length, 0);
+  assert.equal(S.needsManualReview({ review_regions: 1, review_areas: [] }), true, 'missing area metadata blocks auto-send');
+  assert.equal(S.needsManualReview({ review_regions: 1, review_areas: [{ bbox: [0.1, 0.1, 0.2, 0.2] }] }), false);
+
   // Attach impossible (composer vanished) → clipboard, still the redacted copy.
   t = io(ok, { route: 'attach', attach: () => false });
   r = await S.protectShot(crop, t.io);

@@ -197,6 +197,9 @@
   "shotButton": {
     "message": "Protected screenshot"
   },
+  "shotReviewRequired": {
+    "message": "This screenshot needs review: the engine cannot reliably distinguish text from the background. No image was attached or copied. Select a smaller area or upload the image to Pseudora to review uncertain regions."
+  },
   "fieldTeam": {
     "message": "Team"
   },
